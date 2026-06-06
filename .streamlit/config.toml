@@ -1,0 +1,7 @@
+[server]
+# Do not expose file system paths or internal details in error pages
+showErrorDetails = false
+
+[browser]
+# Prevents Streamlit from gathering usage statistics
+gatherUsageStats = false
