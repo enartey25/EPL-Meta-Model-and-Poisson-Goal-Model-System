@@ -529,7 +529,7 @@ elif nav == "Match Predictor":
                 st.markdown("---")
 
                 # ── SECTION 2: Calibrated Poisson ─────────────────────────────
-                st.markdown(f"<div class='sec-label'>Calibrated Poisson &mdash; &lambda;&sub;h;={result['lambda_h']:.2f}, &lambda;&sub;a;={result['lambda_a']:.2f}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='sec-label'>Calibrated Poisson &mdash; lh={result['lambda_h']:.2f}, la={result['lambda_a']:.2f}</div>", unsafe_allow_html=True)
 
                 mls = result["most_likely_score"]
                 st.markdown(f"""
