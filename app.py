@@ -314,7 +314,20 @@ from visualizations import (
     plot_goals_per_season, plot_h2h, plot_team_radar,
 )
 
-# ─── Sidebar ──────────────────────────────────────────────────────────────────
+# ─── Custom metric card ───────────────────────────────────────────────────────
+def team_metric(col, label: str, value: str, accent: str) -> None:
+    """Render a metric card with a team-coloured top border inside a column."""
+    col.markdown(f"""
+    <div style="background:#0e1117; border:1px solid #1c2128;
+                border-top:2px solid {accent}; padding:18px 20px;">
+        <div style="font-size:10px; font-weight:700; letter-spacing:2px;
+                    text-transform:uppercase; color:#6e7681; margin-bottom:8px;">{label}</div>
+        <div style="font-size:26px; font-weight:700; color:#e6edf3;
+                    font-family:'JetBrains Mono',monospace;">{value}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
 with st.sidebar:
     st.markdown("""
     <div style='padding: 24px 0 12px;'>
@@ -515,9 +528,9 @@ elif nav == "Match Predictor":
                 """, unsafe_allow_html=True)
 
                 m1, m2, m3 = st.columns(3)
-                m1.metric(f"{home_team} Win", f"{stk['Home Win']*100:.1f}%")
-                m2.metric("Draw", f"{stk['Draw']*100:.1f}%")
-                m3.metric(f"{away_team} Win", f"{stk['Away Win']*100:.1f}%")
+                team_metric(m1, f"{home_team} Win", f"{stk['Home Win']*100:.1f}%", hc)
+                team_metric(m2, "Draw", f"{stk['Draw']*100:.1f}%", "#f59e0b")
+                team_metric(m3, f"{away_team} Win", f"{stk['Away Win']*100:.1f}%", ac)
 
                 st.markdown("<div class='chart-wrap'>", unsafe_allow_html=True)
                 st.plotly_chart(
@@ -548,9 +561,9 @@ elif nav == "Match Predictor":
                 """, unsafe_allow_html=True)
 
                 p1, p2, p3 = st.columns(3)
-                p1.metric(f"{home_team} Win (Poisson)", f"{proba['Home Win']*100:.1f}%")
-                p2.metric("Draw (Poisson)", f"{proba['Draw']*100:.1f}%")
-                p3.metric(f"{away_team} Win (Poisson)", f"{proba['Away Win']*100:.1f}%")
+                team_metric(p1, f"{home_team} Win (Poisson)", f"{proba['Home Win']*100:.1f}%", hc)
+                team_metric(p2, "Draw (Poisson)", f"{proba['Draw']*100:.1f}%", "#f59e0b")
+                team_metric(p3, f"{away_team} Win (Poisson)", f"{proba['Away Win']*100:.1f}%", ac)
 
                 st.markdown("<div class='chart-wrap'>", unsafe_allow_html=True)
                 st.plotly_chart(
