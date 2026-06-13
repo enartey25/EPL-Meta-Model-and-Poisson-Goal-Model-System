@@ -32,6 +32,17 @@ _THEME = dict(
 )
 
 
+def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:
+    """Convert a #RRGGBB hex string to an rgba() string Plotly accepts."""
+    h = hex_color.lstrip("#")
+    if len(h) == 6:
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    else:
+        # fallback — return as-is
+        return hex_color
+    return f"rgba({r},{g},{b},{alpha})"
+
+
 def _axis_style(title: str = "", suffix: str = "") -> dict:
     return dict(
         title=dict(text=title, font=dict(size=12, color=MUTED)),
@@ -193,7 +204,7 @@ def plot_score_heatmap(
 
     colorscale = [
         [0.0,  BG],
-        [0.35, f"{home_color}55"],
+        [0.35, _hex_to_rgba(home_color, 0.35)],
         [0.7,  home_color],
         [1.0,  TEXT],
     ]
