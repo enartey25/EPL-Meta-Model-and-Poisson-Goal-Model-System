@@ -103,16 +103,16 @@ The complete pipeline was evaluated against all 10 live fixtures of Gameweek 1 o
 
 | Fixture | Actual Result | Model Pick | Model Probability | Status | Top Scoreline Probability |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| **Arsenal vs Coventry City** | **3–0** | **Home Win** | **67.2%** | ✅ Hit | 3–0 was 6.5% |
-| **Man City vs Bournemouth** | **2–1** | **Home Win** | **54.4%** | ✅ Hit | 2–1 was 8.5% |
-| **Brentford vs Tottenham** | **3–0** | **Home Win** | **51.4%** | ✅ Hit | 3–0 was 4.2% |
-| **Everton vs Crystal Palace** | **2–0** | **Home Win** | **42.9%** | ✅ Hit | 2–0 was 7.5% |
-| **Brighton vs Aston Villa** | **4–0** | **Home Win** | **41.8%** | ✅ Hit | 4–0 was 1.7% |
-| **Ipswich Town vs Sunderland** | **2–1** | **Home Win** | **34.8%** | ✅ Hit | 2–1 was 6.3% |
-| **Newcastle vs Liverpool** | **2–2** | Home Win (43.1%) | Draw: 32.4% | ⚡ *Score Hit* | **2–2 was #1 Top Score (11.6%)** |
-| **Hull City vs Man United** | **2–0** | Away Win | 80.7% | ❌ Miss | Promoted Prior (Hull win 9.0%) |
-| **Nott'm Forest vs Leeds** | **0–1** | Home Win | 43.1% | ❌ Miss | Promoted Prior (Leeds win 17.9%) |
-| **Fulham vs Chelsea** | **2–3** | Draw | 40.7% | ❌ Miss | Derby Variance (Chelsea win 23.1%) |
+| **Arsenal vs Coventry City** | **3–0** | **Home Win** | **67.2%** | Hit | 3–0 was 6.5% |
+| **Man City vs Bournemouth** | **2–1** | **Home Win** | **54.4%** | Hit | 2–1 was 8.5% |
+| **Brentford vs Tottenham** | **3–0** | **Home Win** | **51.4%** | Hit | 3–0 was 4.2% |
+| **Everton vs Crystal Palace** | **2–0** | **Home Win** | **42.9%** | Hit | 2–0 was 7.5% |
+| **Brighton vs Aston Villa** | **4–0** | **Home Win** | **41.8%** | Hit | 4–0 was 1.7% |
+| **Ipswich Town vs Sunderland** | **2–1** | **Home Win** | **34.8%** | Hit | 2–1 was 6.3% |
+| **Newcastle vs Liverpool** | **2–2** | Home Win (43.1%) | Draw: 32.4% | Score Hit | **2–2 was #1 Top Score (11.6%)** |
+| **Hull City vs Man United** | **2–0** | Away Win | 80.7% | Miss | Promoted Prior (Hull win 9.0%) |
+| **Nott'm Forest vs Leeds** | **0–1** | Home Win | 43.1% | Miss | Promoted Prior (Leeds win 17.9%) |
+| **Fulham vs Chelsea** | **2–3** | Draw | 40.7% | Miss | Derby Variance (Chelsea win 23.1%) |
 
 ### Key Model Strengths Demonstrated in Live Testing
 1. **Clear Favorite Identification**: Accurately called high-confidence opening victories for Arsenal (67.2%) and Manchester City (54.4%) without succumbing to opening-day parity traps.
