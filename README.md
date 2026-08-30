@@ -154,9 +154,37 @@ The complete pipeline was evaluated against all 10 live fixtures of Gameweek 1 o
 
 ---
 
+---
+
+## Automated Retraining Pipeline (Dual-Cadence Architecture)
+
+The system features an automated MLOps pipeline executing via **GitHub Actions** (`.github/workflows/weekly_pipeline.yml`):
+
+* **Weekly State Updates (Wednesdays 04:00 UTC)**: Automatically fetches newly completed match results, updates sequential Elo ratings, rolling 5-match expected goals (xG) form, and the expanding-mean Poisson goal table.
+* **5-Gameweek Model Retraining (Every 50 Fixtures)**: To align with the 5-match rolling feature window and prevent the tree models from overfitting to single-gameweek noise, full retraining of XGBoost, Random Forest, and the Level-1 Stacking Meta-Learner triggers automatically every 5 Gameweeks (~monthly / international break cadence).
+
+```bash
+# Run weekly state update (or full retrain if 50 new fixtures accumulated)
+python -m pipeline.run_pipeline
+
+# Force full model retraining immediately
+python -m pipeline.run_pipeline --force-retrain
+```
+
+---
+
 ## Project Structure
 
 ```
+├── .github/workflows/
+│   └── weekly_pipeline.yml     # Scheduled weekly GitHub Actions workflow
+├── pipeline/
+│   ├── fetch_data.py           # Match & Understat xG scraper with SSL fallback
+│   ├── build_features.py       # Sequential Elo, rolling xG & variance engine
+│   ├── update_poisson.py       # Leakage-free expanding-mean Poisson tables
+│   ├── train_models.py         # XGBoost, RF & Level-1 Stacking Meta-Learner
+│   ├── export_assets.py        # Atomic asset serialization into epl_predictor_assets.pkl
+│   └── run_pipeline.py         # Master dual-cadence CLI orchestrator
 ├── app.py                      # Streamlit multi-page dashboard
 ├── predictor.py                # Match prediction pipeline (ensemble + Poisson)
 ├── feature_engine.py           # Elo state, team registry, promoted club logic

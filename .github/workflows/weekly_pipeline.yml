@@ -1,18 +1,23 @@
-name: Weekly EPL Model Retraining Pipeline
+name: EPL Pipeline - Weekly State Update & 5-Gameweek Model Retraining
 
 on:
   schedule:
-    # Runs every Wednesday at 04:00 AM UTC
+    # Runs automatically every Wednesday at 04:00 AM UTC
     - cron: '0 4 * * 3'
   workflow_dispatch:
-    # Allows manual trigger via GitHub Actions UI
+    inputs:
+      force_retrain:
+        description: 'Force full XGBoost, RF & Meta-Learner retraining (ignores 50-match threshold)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
-  retrain-pipeline:
-    name: Ingest Data & Retrain Models
+  update-pipeline:
+    name: Run Dual-Cadence Pipeline
     runs-on: ubuntu-latest
 
     steps:
@@ -32,15 +37,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Execute Weekly Retraining Pipeline
+      - name: Execute Pipeline
         run: |
-          python -m pipeline.run_pipeline --output epl_predictor_assets.pkl
+          FLAGS=""
+          if [ "${{ github.event.inputs.force_retrain }}" = "true" ]; then
+            FLAGS="--force-retrain"
+          fi
+          python -m pipeline.run_pipeline --output epl_predictor_assets.pkl $FLAGS
 
-      - name: Run Test Suite
+      - name: Run Smoke Test
         run: |
-          python -c "from predictor import predict_match; r = predict_match('Arsenal', 'Chelsea'); print('Smoke test OK:', r['predicted_outcome'])"
+          python -c "from predictor import predict_match; r = predict_match('Arsenal', 'Chelsea'); print('Smoke test OK:', r['predicted_outcome'], r['confidence'])"
 
-      - name: Commit and Push Updated Model Assets
+      - name: Commit and Push Updated Assets
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -48,6 +57,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes in model assets. Skipping commit."
           else
-            git commit -m "chore(pipeline): weekly automated model retraining [skip ci]"
+            git commit -m "chore(pipeline): automated weekly state update / 5-gameweek retraining [skip ci]"
             git push origin main
           fi

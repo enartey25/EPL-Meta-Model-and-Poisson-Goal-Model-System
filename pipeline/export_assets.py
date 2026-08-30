@@ -22,9 +22,9 @@ def export_assets_bundle(
     team_map: dict,
     df_poisson: pd.DataFrame,
     output_path: str = "epl_predictor_assets.pkl",
+    last_trained_count: int = None,
 ) -> str:
     """Pack models and state into a single pickle artifact atomically."""
-    # Construct complete payload matching the expected asset structure
     bundle = {
         "stacked_meta_model": models_dict["stacked_meta_model"],
         "best_xgb_model": models_dict["best_xgb_model"],
@@ -34,15 +34,14 @@ def export_assets_bundle(
         "state": state,
         "final_features": FINAL_FEATURES,
         "df_poisson": df_poisson,
+        "last_trained_count": last_trained_count or len(df_poisson),
     }
 
-    # Atomic write via temporary file
     dir_name = os.path.dirname(os.path.abspath(output_path))
     with tempfile.NamedTemporaryFile("wb", dir=dir_name, delete=False) as tf:
         pickle.dump(bundle, tf, protocol=pickle.HIGHEST_PROTOCOL)
         temp_path = tf.name
 
-    # Create backup of existing assets file if it exists
     if os.path.exists(output_path):
         backup_path = output_path + ".bak"
         shutil.copy2(output_path, backup_path)
