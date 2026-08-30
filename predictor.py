@@ -3,7 +3,7 @@ import scipy.stats as stats
 import warnings
 warnings.filterwarnings("ignore")
 
-from feature_engine import load_assets, build_inference_row
+from feature_engine import load_assets, build_inference_row, is_promoted_or_new
 
 # label_map from pkl: {0: 'Draw', 1: 'AwayWin', 2: 'HomeWin'}
 OUTCOME_COLORS = {
@@ -27,7 +27,7 @@ def _get_stacked_proba(home_team: str, away_team: str) -> np.ndarray:
     final_features = assets["final_features"]
 
     row = build_inference_row(home_team, away_team)
-    X   = row[final_features].values
+    X   = row[final_features]
 
     xgb_p = xgb_model.predict_proba(X)   # (1, 3)
     rf_p  = rf_model.predict_proba(X)    # (1, 3)
@@ -37,7 +37,6 @@ def _get_stacked_proba(home_team: str, away_team: str) -> np.ndarray:
     final_classes = meta_model.classes_               # class indices in model order
 
     # Build [Draw, AwayWin, HomeWin] in label_map order (0,1,2)
-    label_map = assets["label_map"]  # {0:'Draw', 1:'AwayWin', 2:'HomeWin'}
     stacked = np.zeros(3)
     for i, cls_idx in enumerate(final_classes):
         stacked[int(cls_idx)] = float(final_proba[i])
@@ -47,7 +46,7 @@ def _get_stacked_proba(home_team: str, away_team: str) -> np.ndarray:
     return stacked   # [Draw_prob, AwayWin_prob, HomeWin_prob]
 
 
-def _get_avg_scored(home_team: str, away_team: str) -> tuple[float, float]:
+def _get_avg_scored(home_team: str, away_team: str) -> tuple[float, float, bool, bool]:
     """
     Get Home_Avg_Scored for home_team and Away_Avg_Scored for away_team
     from df_poisson — each team's own most recent expanding average,
@@ -57,33 +56,51 @@ def _get_avg_scored(home_team: str, away_team: str) -> tuple[float, float]:
                         team's home matches (shift=1, leakage-free).
       Away_Avg_Scored = expanding mean of (FTAG + away_xG)/2 for that
                         team's away matches (shift=1, leakage-free).
+
+    If a club is newly promoted or has no matches in df_poisson,
+    falls back to the empirical baseline league home/away averages.
     """
     assets = load_assets()
     df = assets.get("df_poisson")
     team_map = assets["team_map"]
     h_id = team_map.get(home_team)
     a_id = team_map.get(away_team)
-    DEFAULT_XG = 1.35
+
+    # Empirical league defaults derived from notebook
+    default_home_xg = float(df["Home_Avg_Scored"].mean()) if (df is not None and "Home_Avg_Scored" in df.columns) else 1.69
+    default_away_xg = float(df["Away_Avg_Scored"].mean()) if (df is not None and "Away_Avg_Scored" in df.columns) else 1.32
+
+    home_is_fallback = False
+    away_is_fallback = False
 
     if df is None:
-        return DEFAULT_XG, DEFAULT_XG
+        return default_home_xg, default_away_xg, True, True
 
     # Home team: most recent Home_Avg_Scored from any home match
     if h_id is not None:
         home_rows = df[df["HomeTeam"] == h_id].sort_values("Date")
-        h_exp = float(home_rows["Home_Avg_Scored"].iloc[-1]) if not home_rows.empty else DEFAULT_XG
+        if not home_rows.empty:
+            h_exp = float(home_rows["Home_Avg_Scored"].iloc[-1])
+        else:
+            h_exp = default_home_xg
+            home_is_fallback = True
     else:
-        h_exp = DEFAULT_XG
+        h_exp = default_home_xg
+        home_is_fallback = True
 
     # Away team: most recent Away_Avg_Scored from any away match
     if a_id is not None:
         away_rows = df[df["AwayTeam"] == a_id].sort_values("Date")
-        a_exp = float(away_rows["Away_Avg_Scored"].iloc[-1]) if not away_rows.empty else DEFAULT_XG
+        if not away_rows.empty:
+            a_exp = float(away_rows["Away_Avg_Scored"].iloc[-1])
+        else:
+            a_exp = default_away_xg
+            away_is_fallback = True
     else:
-        a_exp = DEFAULT_XG
+        a_exp = default_away_xg
+        away_is_fallback = True
 
-    return h_exp, a_exp
-
+    return h_exp, a_exp, home_is_fallback, away_is_fallback
 
 
 # ─── Calibrated Poisson ──────────────────────────────────────────────────────
@@ -152,7 +169,9 @@ def extract_outcome_probs(matrix: np.ndarray) -> dict:
     away_win = float(np.sum(np.triu(matrix, k=1)))
     total    = home_win + draw + away_win
     if total > 0:
-        home_win /= total; draw /= total; away_win /= total
+        home_win /= total
+        draw /= total
+        away_win /= total
     return {"Home Win": home_win, "Draw": draw, "Away Win": away_win}
 
 
@@ -162,15 +181,15 @@ def predict_match(home_team: str, away_team: str) -> dict:
     """
     Full inference pipeline:
       1. Stacked model (XGB + RF → LogReg) → stacked_proba [D, AW, HW]
-      2. Look up Home/Away_Avg_Scored lambdas from df_poisson
+      2. Look up Home/Away_Avg_Scored lambdas from df_poisson (with promoted priors)
       3. Calibrated Poisson matrix
-      4. Return outcome probs, most likely score, Poisson display data
+      4. Return outcome probs, most likely score, Poisson display data & metadata
     """
     # Step 1: stacked model probabilities
     stacked = _get_stacked_proba(home_team, away_team)
 
     # Step 2: expected goals (lambdas)
-    h_exp, a_exp = _get_avg_scored(home_team, away_team)
+    h_exp, a_exp, h_fallback, a_fallback = _get_avg_scored(home_team, away_team)
 
     # Step 3: calibrated Poisson
     matrix = calibrated_poisson_matrix(stacked, h_exp, a_exp, max_goals=5)
@@ -190,6 +209,10 @@ def predict_match(home_team: str, away_team: str) -> dict:
     h_pmf8 = stats.poisson.pmf(goals8, max(h_exp, 0.01))
     a_pmf8 = stats.poisson.pmf(goals8, max(a_exp, 0.01))
 
+    # Promoted / new team metadata
+    home_promoted = is_promoted_or_new(home_team)
+    away_promoted = is_promoted_or_new(away_team)
+
     return {
         "proba":             proba,
         "stacked_proba":     {"Draw": stacked[0], "Away Win": stacked[1], "Home Win": stacked[2]},
@@ -203,4 +226,9 @@ def predict_match(home_team: str, away_team: str) -> dict:
         "a_pmf8":            a_pmf8,
         "home_team":         home_team,
         "away_team":         away_team,
+        "home_is_promoted":  home_promoted,
+        "away_is_promoted":  away_promoted,
+        "has_promoted_team": home_promoted or away_promoted,
+        "home_fallback":     h_fallback,
+        "away_fallback":     a_fallback,
     }

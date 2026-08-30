@@ -2,11 +2,13 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import warnings
+import hashlib
+
 warnings.filterwarnings("ignore")
 
 st.set_page_config(
     page_title="EPL Match Predictor",
-    page_icon="",
+    page_icon="⚽",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -14,7 +16,7 @@ st.set_page_config(
 # ─── Custom CSS ───────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 *, html, body, [class*="css"] {
     font-family: 'Outfit', sans-serif;
@@ -66,9 +68,15 @@ section[data-testid="stSidebar"] p { color: #6e7681; font-size: 12px; }
     width: 100%;
     letter-spacing: 2px;
     text-transform: uppercase;
-    transition: background 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s, transform 0.1s;
 }
-.stButton > button:hover { background: #00d4aa; color: #080b10; }
+.stButton > button:hover {
+    background: #00d4aa;
+    color: #080b10;
+}
+.stButton > button:active {
+    transform: scale(0.99);
+}
 
 .stSelectbox > div > div {
     background: #0e1117 !important;
@@ -231,6 +239,25 @@ hr { border-color: #1c2128; margin: 28px 0; }
     font-family: 'JetBrains Mono', monospace;
 }
 
+/* ── Promoted team prior callout ── */
+.promoted-prior-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(124, 58, 237, 0.12);
+    border: 1px solid rgba(124, 58, 237, 0.35);
+    border-left: 3px solid #7c3aed;
+    padding: 10px 14px;
+    margin-bottom: 18px;
+    font-size: 11px;
+    color: #c4b5fd;
+    line-height: 1.5;
+    width: 100%;
+}
+.promoted-prior-badge b {
+    color: #a78bfa;
+}
+
 /* ── Notice / disclaimer ── */
 .notice-box {
     background: #0e1117;
@@ -265,48 +292,64 @@ hr { border-color: #1c2128; margin: 28px 0; }
     padding: 10px 12px;
 }
 .sidebar-disclaimer b { color: #f59e0b; }
-
 </style>
 """, unsafe_allow_html=True)
 
 # ─── Team Color Map ────────────────────────────────────────────────────────────
 TEAM_COLORS = {
-    "Arsenal":         {"primary": "#EF0107", "text": "#ffffff"},
-    "Aston Villa":     {"primary": "#95BFE5", "text": "#670E36"},
-    "Bournemouth":     {"primary": "#DA291C", "text": "#ffffff"},
-    "Brentford":       {"primary": "#e30613", "text": "#ffffff"},
-    "Brighton":        {"primary": "#0057B8", "text": "#ffffff"},
-    "Burnley":         {"primary": "#6C1D45", "text": "#ffffff"},
-    "Chelsea":         {"primary": "#034694", "text": "#ffffff"},
-    "Crystal Palace":  {"primary": "#1B458F", "text": "#ffffff"},
-    "Everton":         {"primary": "#003399", "text": "#ffffff"},
-    "Fulham":          {"primary": "#CC0000", "text": "#ffffff"},
-    "Ipswich":         {"primary": "#3a64a3", "text": "#ffffff"},
-    "Leeds":           {"primary": "#FFCD00", "text": "#1D428A"},
-    "Leicester":       {"primary": "#003090", "text": "#ffffff"},
-    "Liverpool":       {"primary": "#C8102E", "text": "#ffffff"},
-    "Luton":           {"primary": "#F78F1E", "text": "#002060"},
-    "Man City":        {"primary": "#6CABDD", "text": "#1c2c5b"},
-    "Man United":      {"primary": "#DA291C", "text": "#ffffff"},
-    "Newcastle":       {"primary": "#241F20", "text": "#ffffff"},
-    "Nott'm Forest":   {"primary": "#DD0000", "text": "#ffffff"},
-    "Sheffield United":{"primary": "#EE2737", "text": "#ffffff"},
-    "Southampton":     {"primary": "#D71920", "text": "#ffffff"},
-    "Sunderland":      {"primary": "#EB172B", "text": "#ffffff"},
-    "Tottenham":       {"primary": "#132257", "text": "#ffffff"},
-    "West Ham":        {"primary": "#7A263A", "text": "#1BB1E7"},
-    "Wolves":          {"primary": "#FDB913", "text": "#231f20"},
+    "Arsenal":          {"primary": "#EF0107", "text": "#ffffff"},
+    "Aston Villa":      {"primary": "#95BFE5", "text": "#670E36"},
+    "Bournemouth":      {"primary": "#DA291C", "text": "#ffffff"},
+    "Brentford":        {"primary": "#e30613", "text": "#ffffff"},
+    "Brighton":         {"primary": "#0057B8", "text": "#ffffff"},
+    "Burnley":          {"primary": "#6C1D45", "text": "#ffffff"},
+    "Chelsea":          {"primary": "#034694", "text": "#ffffff"},
+    "Crystal Palace":   {"primary": "#1B458F", "text": "#ffffff"},
+    "Everton":          {"primary": "#003399", "text": "#ffffff"},
+    "Fulham":           {"primary": "#CC0000", "text": "#ffffff"},
+    "Ipswich":          {"primary": "#3a64a3", "text": "#ffffff"},
+    "Leeds":            {"primary": "#FFCD00", "text": "#1D428A"},
+    "Leicester":        {"primary": "#003090", "text": "#ffffff"},
+    "Liverpool":        {"primary": "#C8102E", "text": "#ffffff"},
+    "Luton":            {"primary": "#F78F1E", "text": "#002060"},
+    "Man City":         {"primary": "#6CABDD", "text": "#1c2c5b"},
+    "Man United":       {"primary": "#DA291C", "text": "#ffffff"},
+    "Newcastle":        {"primary": "#241F20", "text": "#ffffff"},
+    "Nott'm Forest":    {"primary": "#DD0000", "text": "#ffffff"},
+    "Sheffield United": {"primary": "#EE2737", "text": "#ffffff"},
+    "Southampton":      {"primary": "#D71920", "text": "#ffffff"},
+    "Sunderland":       {"primary": "#EB172B", "text": "#ffffff"},
+    "Tottenham":        {"primary": "#132257", "text": "#ffffff"},
+    "West Ham":         {"primary": "#7A263A", "text": "#1BB1E7"},
+    "Wolves":           {"primary": "#FDB913", "text": "#231f20"},
+    # Additional clubs / potential promoted teams
+    "Norwich":          {"primary": "#FFF200", "text": "#008B45"},
+    "Watford":          {"primary": "#FBEE23", "text": "#ED2127"},
+    "West Brom":        {"primary": "#122F67", "text": "#ffffff"},
+    "Middlesbrough":    {"primary": "#E00000", "text": "#ffffff"},
+    "Coventry":         {"primary": "#00A3E0", "text": "#ffffff"},
+    "Coventry City":    {"primary": "#00A3E0", "text": "#ffffff"},
+    "Hull":             {"primary": "#FFA000", "text": "#000000"},
+    "Hull City":        {"primary": "#FFA000", "text": "#000000"},
+    "Ipswich Town":     {"primary": "#003399", "text": "#ffffff"},
+    "Stoke":            {"primary": "#E03A3E", "text": "#ffffff"},
 }
 
 def team_color(team: str) -> str:
-    return TEAM_COLORS.get(team, {}).get("primary", "#00d4aa")
+    """Return primary team color or deterministically generate a vivid accent."""
+    if team in TEAM_COLORS:
+        return TEAM_COLORS[team]["primary"]
+    # Deterministic palette fallback
+    h = int(hashlib.md5(team.encode("utf-8")).hexdigest(), 16)
+    hue = h % 360
+    return f"hsl({hue}, 75%, 55%)"
 
 def team_text(team: str) -> str:
     return TEAM_COLORS.get(team, {}).get("text", "#080b10")
 
 # ─── Imports ──────────────────────────────────────────────────────────────────
 from data_loader import load_full_dataset, fetch_xg_data, compute_league_table
-from feature_engine import get_teams, get_elo_state
+from feature_engine import get_teams, get_elo_state, is_promoted_or_new
 from predictor import predict_match, OUTCOME_COLORS
 from visualizations import (
     plot_result_distribution, plot_elo_rankings, plot_xg_trend,
@@ -347,15 +390,17 @@ with st.sidebar:
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown("""
     <div style='font-size:10px; color:#6e7681; line-height:2;'>
-    <span style='font-size:9px; font-weight:700; letter-spacing:3px; color:#e6edf3; text-transform:uppercase;'>Model</span><br>
+    <span style='font-size:9px; font-weight:700; letter-spacing:3px; color:#e6edf3; text-transform:uppercase;'>Model Architecture</span><br>
     XGBoost + Random Forest<br>
-    &rarr; Logistic Regression meta<br><br>
-    <span style='font-size:9px; font-weight:700; letter-spacing:3px; color:#e6edf3; text-transform:uppercase;'>Poisson</span><br>
-    Zone-scaled, leakage-free<br>
-    Goals + xG blend<br><br>
-    <span style='font-size:9px; font-weight:700; letter-spacing:3px; color:#e6edf3; text-transform:uppercase;'>Sources</span><br>
-    football-data.co.uk<br>
-    Understat (xG)
+    &rarr; Logistic Regression Meta-Learner<br><br>
+    <span style='font-size:9px; font-weight:700; letter-spacing:3px; color:#e6edf3; text-transform:uppercase;'>Poisson Engine</span><br>
+    Zone-calibrated score grid<br>
+    Blended Goals &amp; xG Expectancy<br><br>
+    <span style='font-size:9px; font-weight:700; letter-spacing:3px; color:#e6edf3; text-transform:uppercase;'>Promoted Team Prior</span><br>
+    1420 Elo Starting Baseline<br>
+    Empirical League xG Priors<br><br>
+    <span style='font-size:9px; font-weight:700; letter-spacing:3px; color:#e6edf3; text-transform:uppercase;'>Data Sources</span><br>
+    football-data.co.uk &middot; Understat
     </div>
     """, unsafe_allow_html=True)
 
@@ -363,10 +408,9 @@ with st.sidebar:
     st.markdown("""
     <div class='sidebar-disclaimer'>
         <b>Disclaimer</b><br>
-        Academic project only. Predictions are
-        <b>not</b> intended for sports betting or
-        gambling. The author accepts no
-        responsibility for financial losses.
+        Academic research &amp; educational project only. Predictions are
+        <b>not</b> intended for sports betting or gambling. The author accepts no
+        responsibility for financial decisions.
     </div>
     """, unsafe_allow_html=True)
 
@@ -380,8 +424,10 @@ def get_data():
 with st.spinner("Loading EPL data..."):
     df_full, df_xg = get_data()
 
-TEAMS = get_teams()
-ELO_STATE = get_elo_state()
+# Dynamic team list merging assets and live match datasets
+discovered_teams = df_full["HomeTeam"].dropna().unique().tolist() if not df_full.empty else []
+TEAMS = get_teams(discovered_teams)
+ELO_STATE = get_elo_state(TEAMS)
 SEASONS = ["All Seasons"] + (
     sorted(df_full["Season"].unique().tolist()) if not df_full.empty else []
 )
@@ -390,21 +436,21 @@ SEASONS = ["All Seasons"] + (
 #  HOME
 # ═══════════════════════════════════════════════════════════════════════════════
 if nav == "Home":
-    st.markdown("<div class='hero-eyebrow'>Premier League Analytics</div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-eyebrow'>Premier League Analytics &amp; Forecasting</div>", unsafe_allow_html=True)
     st.markdown("<div class='hero-title'>EPL <em>Match</em> Predictor</div>", unsafe_allow_html=True)
     st.markdown("""
     <div class='hero-sub'>
-        Stacked ensemble model (XGBoost + Random Forest &rarr; Logistic Regression),
-        calibrated via leakage-free Poisson goal modelling using blended Goals + xG.
+        Stacked ensemble classification (XGBoost + Random Forest &rarr; Logistic Regression)
+        integrated with a zone-calibrated, leakage-free Poisson goal model. Accounts for all
+        historical, current, and newly promoted Premier League clubs.
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
     <div class='notice-box'>
         <b>Academic Disclaimer</b> &mdash;
-        This application is a <b>student project</b> developed solely for educational
-        and research purposes. All predictions are statistical estimates and are
-        <b>not</b> intended to be used for sports betting, gambling, or any
-        financial decision-making. The author accepts no responsibility for losses.
+        This application is developed solely for educational and research purposes.
+        All match forecasts are statistical estimates and are <b>not</b> intended
+        for sports betting, wagering, or financial speculation.
     </div>
     """, unsafe_allow_html=True)
 
@@ -437,31 +483,31 @@ if nav == "Home":
         st.markdown("</div>", unsafe_allow_html=True)
 
     else:
-        st.warning("Could not load match data. Check your internet connection.")
+        st.warning("Match dataset is offline or loading. Defaulting to asset data.")
 
     if ELO_STATE:
-        st.markdown("<div class='sec-label'>Current ELO Standings</div>", unsafe_allow_html=True)
+        st.markdown("<div class='sec-label'>Current ELO Standings &middot; All Clubs</div>", unsafe_allow_html=True)
         elo_df = pd.DataFrame(
             sorted(ELO_STATE.items(), key=lambda x: -x[1]),
             columns=["Team", "ELO Rating"]
         )
         elo_df.insert(0, "Rank", range(1, len(elo_df) + 1))
+        elo_df["Status"] = elo_df["Team"].apply(lambda t: "Promoted Prior Baseline" if is_promoted_or_new(t) else "Tracked Club")
         elo_df["ELO Rating"] = elo_df["ELO Rating"].round(1)
-        st.dataframe(elo_df, use_container_width=True, hide_index=True, height=380)
+        st.dataframe(elo_df, use_container_width=True, hide_index=True, height=420)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  MATCH PREDICTOR
 # ═══════════════════════════════════════════════════════════════════════════════
 elif nav == "Match Predictor":
-    st.markdown("<div class='hero-eyebrow'>Premier League Predictions</div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-eyebrow'>Premier League Predictions &middot; Full Pipeline</div>", unsafe_allow_html=True)
     st.markdown("<div class='hero-title'><em>Match</em> Predictor</div>", unsafe_allow_html=True)
 
     st.markdown("""
     <div class='notice-box-red'>
         <b>Important Notice</b> &mdash;
-        Predictions are for <b>academic and entertainment purposes only</b>.
-        They are <b>not</b> a basis for sports betting or wagering of any kind.
-        The author accepts <b>no liability</b> for financial losses incurred.
+        Predictions are for <b>academic and research evaluation only</b>.
+        They are <b>not</b> a basis for sports wagering.
     </div>
     """, unsafe_allow_html=True)
 
@@ -473,7 +519,7 @@ elif nav == "Match Predictor":
             key="home",
         )
     with col2:
-        st.markdown("<div style='text-align:center; padding-top:28px; font-size:0.75rem; font-weight:700; letter-spacing:4px; color:#1c2128; font-family:JetBrains Mono,monospace;'>VS</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; padding-top:28px; font-size:0.75rem; font-weight:700; letter-spacing:4px; color:#6e7681; font-family:JetBrains Mono,monospace;'>VS</div>", unsafe_allow_html=True)
     with col3:
         away_options = [t for t in TEAMS if t != home_team]
         away_team = st.selectbox(
@@ -490,19 +536,36 @@ elif nav == "Match Predictor":
         <div class='versus-team' style='border-top: 3px solid {hc};'>
             <div class='versus-team-label'>Home</div>
             <div class='versus-team-name' style='color:{hc};'>{home_team}</div>
+            <div style='font-size:10px; color:#6e7681; font-family:JetBrains Mono,monospace;'>ELO: {ELO_STATE.get(home_team, 1420.0):.1f}</div>
         </div>
         <div class='versus-divider'>VS</div>
         <div class='versus-team' style='border-top: 3px solid {ac};'>
             <div class='versus-team-label'>Away</div>
             <div class='versus-team-name' style='color:{ac};'>{away_team}</div>
+            <div style='font-size:10px; color:#6e7681; font-family:JetBrains Mono,monospace;'>ELO: {ELO_STATE.get(away_team, 1420.0):.1f}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
+    # Promoted Club Notice if applicable
+    home_prom = is_promoted_or_new(home_team)
+    away_prom = is_promoted_or_new(away_team)
+    if home_prom or away_prom:
+        promoted_names = []
+        if home_prom: promoted_names.append(f"<b>{home_team}</b>")
+        if away_prom: promoted_names.append(f"<b>{away_team}</b>")
+        names_str = " and ".join(promoted_names)
+        st.markdown(f"""
+        <div class='promoted-prior-badge'>
+            <span>&#9889;</span>
+            <span><b>Promoted Club Prior Active:</b> {names_str} is evaluated with an initial <b>1420.0 Elo starting rating</b> and empirical league-calibrated goal expectancy priors, as defined in the development notebook.</span>
+        </div>
+        """, unsafe_allow_html=True)
+
     predict_btn = st.button("Run Prediction")
 
     if predict_btn:
-        with st.spinner("Running stacked model + calibrated Poisson..."):
+        with st.spinner("Generating Level-1 Meta predictions & calibrated Poisson distributions..."):
             try:
                 result    = predict_match(home_team, away_team)
                 proba     = result["proba"]
@@ -512,12 +575,12 @@ elif nav == "Match Predictor":
                 hc        = team_color(home_team)
                 ac        = team_color(away_team)
 
-                # ── Result color by outcome ───────────────────────────────────
+                # Result color by outcome
                 outcome_color = hc if predicted == "Home Win" else (ac if predicted == "Away Win" else "#f59e0b")
                 outcome_label = f"{home_team} Win" if predicted == "Home Win" else (f"{away_team} Win" if predicted == "Away Win" else "Draw")
 
                 # ── SECTION 1: Meta Model result block ────────────────────────
-                st.markdown("<div class='sec-label'>Stacking Meta Model &mdash; XGBoost + Random Forest &rarr; Logistic Regression</div>", unsafe_allow_html=True)
+                st.markdown("<div class='sec-label'>Stacking Meta-Model &mdash; Level-1 Logistic Regression (XGBoost + Random Forest)</div>", unsafe_allow_html=True)
 
                 st.markdown(f"""
                 <div class='result-block' style='border-left-color:{outcome_color};'>
@@ -542,7 +605,7 @@ elif nav == "Match Predictor":
                 st.markdown("---")
 
                 # ── SECTION 2: Calibrated Poisson ─────────────────────────────
-                st.markdown(f"<div class='sec-label'>Calibrated Poisson &mdash; lh={result['lambda_h']:.2f}, la={result['lambda_a']:.2f}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='sec-label'>Zone-Calibrated Poisson &mdash; Exp Goals: {home_team} (&lambda;h = {result['lambda_h']:.2f}) vs {away_team} (&lambda;a = {result['lambda_a']:.2f})</div>", unsafe_allow_html=True)
 
                 mls = result["most_likely_score"]
                 st.markdown(f"""
@@ -551,11 +614,11 @@ elif nav == "Match Predictor":
                     <div class='scoreline-value'>{mls[0]}&ndash;{mls[1]}</div>
                     <div class='scoreline-meta'>
                         {home_team} &nbsp;&middot;&nbsp; {away_team} &nbsp;&middot;&nbsp;
-                        p = {result['matrix'][mls[0], mls[1]]*100:.1f}%
+                        Probability: {result['matrix'][mls[0], mls[1]]*100:.1f}%
                     </div>
-                    <div style='font-size:0.7rem; color:#6e7681; margin-top:10px;'>
-                        The most likely scoreline may differ from the predicted outcome &mdash;
-                        outcome probabilities aggregate across all matching scorelines.
+                    <div style='font-size:0.75rem; color:#6e7681; margin-top:10px;'>
+                        The most likely individual scoreline reflects the peak joint probability cell,
+                        while outcome probabilities aggregate all scores across home win, draw, and away win zones.
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -582,30 +645,41 @@ elif nav == "Match Predictor":
                 st.markdown("---")
 
                 # ── Model inputs ──────────────────────────────────────────────
-                st.markdown("<div class='sec-label'>Model Inputs</div>", unsafe_allow_html=True)
+                st.markdown("<div class='sec-label'>Feature Engine &amp; Prior Parameters</div>", unsafe_allow_html=True)
                 feat_data = {
-                    "Metric": [
-                        f"{home_team} Home Avg Scored (lh)",
-                        f"{away_team} Away Avg Scored (la)",
-                        "Meta Model: Home Win", "Meta Model: Draw", "Meta Model: Away Win",
-                        "Calibrated Poisson: Home Win", "Calibrated Poisson: Draw", "Calibrated Poisson: Away Win",
+                    "Parameter / Feature": [
+                        f"{home_team} Pre-Match Elo",
+                        f"{away_team} Pre-Match Elo",
+                        "Net Elo Advantage (Home - Away)",
+                        f"{home_team} Home Scored Expectancy (&lambda;h)",
+                        f"{away_team} Away Scored Expectancy (&lambda;a)",
+                        f"{home_team} Prior Status",
+                        f"{away_team} Prior Status",
+                        "Meta Ensemble Outcome Proba",
+                        "Calibrated Poisson Proba",
                     ],
                     "Value": [
-                        f"{result['lambda_h']:.3f}", f"{result['lambda_a']:.3f}",
-                        f"{stk['Home Win']*100:.1f}%", f"{stk['Draw']*100:.1f}%", f"{stk['Away Win']*100:.1f}%",
-                        f"{proba['Home Win']*100:.1f}%", f"{proba['Draw']*100:.1f}%", f"{proba['Away Win']*100:.1f}%",
+                        f"{ELO_STATE.get(home_team, 1420.0):.1f}",
+                        f"{ELO_STATE.get(away_team, 1420.0):.1f}",
+                        f"{ELO_STATE.get(home_team, 1420.0) - ELO_STATE.get(away_team, 1420.0):+.1f}",
+                        f"{result['lambda_h']:.3f}" + (" (Empirical Baseline)" if result['home_fallback'] else ""),
+                        f"{result['lambda_a']:.3f}" + (" (Empirical Baseline)" if result['away_fallback'] else ""),
+                        "Promoted Baseline (1420.0 Elo)" if home_prom else "Trained Historical Record",
+                        "Promoted Baseline (1420.0 Elo)" if away_prom else "Trained Historical Record",
+                        f"HW: {stk['Home Win']*100:.1f}% | D: {stk['Draw']*100:.1f}% | AW: {stk['Away Win']*100:.1f}%",
+                        f"HW: {proba['Home Win']*100:.1f}% | D: {proba['Draw']*100:.1f}% | AW: {proba['Away Win']*100:.1f}%",
                     ],
                 }
                 st.dataframe(pd.DataFrame(feat_data), use_container_width=True, hide_index=True)
 
-            except Exception:
-                st.error("Prediction could not be generated. Please try a different team selection or refresh the page.")
+            except Exception as e:
+                st.error(f"Prediction could not be generated: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  SEASON ANALYTICS
 # ═══════════════════════════════════════════════════════════════════════════════
 elif nav == "Season Analytics":
-    st.markdown("<div class='hero-eyebrow'>Data &middot; Trends &middot; Form</div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-eyebrow'>Data &middot; Trends &middot; Performance</div>", unsafe_allow_html=True)
     st.markdown("<div class='hero-title'><em>Season</em> Analytics</div>", unsafe_allow_html=True)
 
     col_s, col_t = st.columns([1, 2])
@@ -661,13 +735,13 @@ elif nav == "Season Analytics":
             )
             st.markdown("</div>", unsafe_allow_html=True)
         else:
-            st.info("xG data not available.")
+            st.info("xG data is currently syncing or unavailable.")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  HEAD TO HEAD
 # ═══════════════════════════════════════════════════════════════════════════════
 elif nav == "Head to Head":
-    st.markdown("<div class='hero-eyebrow'>Historical Record</div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-eyebrow'>Historical Record &middot; Matchups</div>", unsafe_allow_html=True)
     st.markdown("<div class='hero-title'>Head <em>to</em> Head</div>", unsafe_allow_html=True)
 
     hc1, hc2 = st.columns(2)
@@ -688,7 +762,7 @@ elif nav == "Head to Head":
         n_matches = len(h2h_df)
 
         st.markdown(
-            f"<div style='font-size:12px; color:#6e7681; margin-bottom:20px; font-family:JetBrains Mono,monospace;'>{n_matches} matches &middot; 2022/23 &ndash; 2025/26</div>",
+            f"<div style='font-size:12px; color:#6e7681; margin-bottom:20px; font-family:JetBrains Mono,monospace;'>{n_matches} matches recorded in database &middot; {h2h_team1} vs {h2h_team2}</div>",
             unsafe_allow_html=True,
         )
 
@@ -709,12 +783,14 @@ elif nav == "Head to Head":
             h2h_display["FTR"] = h2h_display["FTR"].map({"H": "Home Win", "D": "Draw", "A": "Away Win"})
             h2h_display.columns = ["Date", "Season", "Home Team", "HG", "AG", "Away Team", "Result"][:len(display_cols)]
             st.dataframe(h2h_display, use_container_width=True, hide_index=True)
+        else:
+            st.info(f"No previous top-flight fixtures recorded between {h2h_team1} and {h2h_team2} in the tracked seasonal windows.")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  LEAGUE TABLE
 # ═══════════════════════════════════════════════════════════════════════════════
 elif nav == "League Table":
-    st.markdown("<div class='hero-eyebrow'>Standing &middot; Points</div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-eyebrow'>Standings &middot; Points &middot; Goal Difference</div>", unsafe_allow_html=True)
     st.markdown("<div class='hero-title'><em>League</em> Table</div>", unsafe_allow_html=True)
 
     lt_season = st.selectbox(
@@ -753,7 +829,7 @@ elif nav == "League Table":
                 table.style.apply(style_table, axis=1),
                 use_container_width=True,
                 hide_index=True,
-                height=720,
+                height=min(800, len(table) * 38 + 50),
             )
             st.markdown("""
             <div style='font-size:11px; color:#6e7681; margin-top:10px; font-family:JetBrains Mono,monospace; letter-spacing:1px;'>
@@ -763,4 +839,4 @@ elif nav == "League Table":
             </div>
             """, unsafe_allow_html=True)
         else:
-            st.info("No data for selected season.")
+            st.info("No data available for selected season.")

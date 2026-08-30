@@ -29,5 +29,11 @@ Thumbs.db
 *.swp
 *.swo
 
-# Test artifacts (keep test_smoke.py out of production if deploying via git)
-# test_smoke.py
+# Test artifacts & temporary scripts
+test_smoke.py
+test_*.py
+scratch/
+*.log
+
+# Development Notebooks
+EPL-Match-Predictor-Development-Notebook/

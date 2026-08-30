@@ -4,57 +4,110 @@ import streamlit as st
 import requests
 import io
 import warnings
+
 warnings.filterwarnings("ignore")
 
 # ─── Team name normalization map ──────────────────────────────────────────────
 TEAM_NAME_MAP = {
-    # football-data.co.uk → canonical name (same as team_map keys)
+    # Canonical 25 teams
     "Arsenal": "Arsenal",
+    "Arsenal FC": "Arsenal",
     "Aston Villa": "Aston Villa",
+    "Aston Villa FC": "Aston Villa",
     "Bournemouth": "Bournemouth",
+    "AFC Bournemouth": "Bournemouth",
     "Brentford": "Brentford",
+    "Brentford FC": "Brentford",
     "Brighton": "Brighton",
     "Brighton & Hove Albion": "Brighton",
+    "Brighton and Hove Albion": "Brighton",
     "Burnley": "Burnley",
+    "Burnley FC": "Burnley",
     "Chelsea": "Chelsea",
+    "Chelsea FC": "Chelsea",
     "Crystal Palace": "Crystal Palace",
+    "Crystal Palace FC": "Crystal Palace",
     "Everton": "Everton",
+    "Everton FC": "Everton",
     "Fulham": "Fulham",
+    "Fulham FC": "Fulham",
     "Ipswich": "Ipswich",
     "Ipswich Town": "Ipswich",
+    "Ipswich Town FC": "Ipswich",
     "Leeds": "Leeds",
     "Leeds United": "Leeds",
+    "Leeds United FC": "Leeds",
     "Leicester": "Leicester",
     "Leicester City": "Leicester",
+    "Leicester City FC": "Leicester",
     "Liverpool": "Liverpool",
+    "Liverpool FC": "Liverpool",
     "Luton": "Luton",
     "Luton Town": "Luton",
+    "Luton Town FC": "Luton",
     "Man City": "Man City",
     "Manchester City": "Man City",
+    "Manchester City FC": "Man City",
     "Man United": "Man United",
     "Manchester United": "Man United",
+    "Manchester United FC": "Man United",
     "Newcastle": "Newcastle",
     "Newcastle United": "Newcastle",
+    "Newcastle United FC": "Newcastle",
     "Nott'm Forest": "Nott'm Forest",
     "Nottingham Forest": "Nott'm Forest",
     "Nottm Forest": "Nott'm Forest",
     "Sheffield United": "Sheffield United",
     "Sheffield Utd": "Sheffield United",
+    "Sheffield United FC": "Sheffield United",
     "Southampton": "Southampton",
+    "Southampton FC": "Southampton",
     "Sunderland": "Sunderland",
+    "Sunderland AFC": "Sunderland",
     "Tottenham": "Tottenham",
     "Tottenham Hotspur": "Tottenham",
+    "Tottenham Hotspur FC": "Tottenham",
+    "Spurs": "Tottenham",
     "West Ham": "West Ham",
     "West Ham United": "West Ham",
+    "West Ham United FC": "West Ham",
     "Wolves": "Wolves",
+    "Wolverhampton": "Wolves",
     "Wolverhampton Wanderers": "Wolves",
-    # Understat names
-    "Manchester City": "Man City",
-    "Manchester United": "Man United",
-    "Newcastle United": "Newcastle",
-    "Nottingham Forest": "Nott'm Forest",
-    "Brighton": "Brighton",
-    "Ipswich": "Ipswich",
+    "Wolverhampton Wanderers FC": "Wolves",
+    # Additional clubs (Championship / promoted)
+    "Norwich": "Norwich",
+    "Norwich City": "Norwich",
+    "Watford": "Watford",
+    "Watford FC": "Watford",
+    "West Brom": "West Brom",
+    "West Bromwich": "West Brom",
+    "West Bromwich Albion": "West Brom",
+    "Middlesbrough": "Middlesbrough",
+    "Coventry": "Coventry",
+    "Coventry City": "Coventry",
+    "Hull": "Hull",
+    "Hull City": "Hull",
+    "Stoke": "Stoke",
+    "Stoke City": "Stoke",
+    "Blackburn": "Blackburn",
+    "Blackburn Rovers": "Blackburn",
+    "Preston": "Preston",
+    "Preston North End": "Preston",
+    "Derby": "Derby",
+    "Derby County": "Derby",
+    "QPR": "QPR",
+    "Queens Park Rangers": "QPR",
+    "Millwall": "Millwall",
+    "Bristol City": "Bristol City",
+    "Swansea": "Swansea",
+    "Swansea City": "Swansea",
+    "Cardiff": "Cardiff",
+    "Cardiff City": "Cardiff",
+    "Portsmouth": "Portsmouth",
+    "Oxford United": "Oxford United",
+    "Plymouth": "Plymouth",
+    "Plymouth Argyle": "Plymouth",
 }
 
 # Understat → canonical
@@ -69,9 +122,19 @@ UNDERSTAT_MAP = {
     "Leicester City": "Leicester",
     "Leeds United": "Leeds",
     "Ipswich": "Ipswich",
+    "Ipswich Town": "Ipswich",
     "Luton": "Luton",
+    "Luton Town": "Luton",
     "Sheffield United": "Sheffield United",
     "West Ham": "West Ham",
+    "West Ham United": "West Ham",
+    "Burnley": "Burnley",
+    "Southampton": "Southampton",
+    "Sunderland": "Sunderland",
+    "Coventry": "Coventry",
+    "Coventry City": "Coventry",
+    "Hull": "Hull",
+    "Hull City": "Hull",
 }
 
 SEASON_URL_MAP = {
@@ -83,16 +146,22 @@ SEASON_URL_MAP = {
 
 
 def normalize_team(name: str) -> str:
-    return TEAM_NAME_MAP.get(name, UNDERSTAT_MAP.get(name, name))
+    if not isinstance(name, str):
+        return str(name)
+    cleaned = name.strip()
+    return TEAM_NAME_MAP.get(cleaned, UNDERSTAT_MAP.get(cleaned, cleaned))
 
 
 def normalize_understat(name: str) -> str:
-    return UNDERSTAT_MAP.get(name, TEAM_NAME_MAP.get(name, name))
+    if not isinstance(name, str):
+        return str(name)
+    cleaned = name.strip()
+    return UNDERSTAT_MAP.get(cleaned, TEAM_NAME_MAP.get(cleaned, cleaned))
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_football_data() -> pd.DataFrame:
-    """Fetch match stats from football-data.co.uk for 4 seasons."""
+    """Fetch match stats from football-data.co.uk for multiple seasons."""
     dfs = []
     cols_needed = [
         "Date", "HomeTeam", "AwayTeam",
@@ -105,17 +174,17 @@ def fetch_football_data() -> pd.DataFrame:
     for season, url in SEASON_URL_MAP.items():
         try:
             resp = requests.get(url, timeout=15, verify=True)
-            resp.raise_for_status()
-            df = pd.read_csv(io.StringIO(resp.text), encoding="latin-1")
-            df = df[[c for c in cols_needed if c in df.columns]].copy()
-            df["Season"] = season
-            df["Date"] = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce")
-            df = df.dropna(subset=["Date", "HomeTeam", "AwayTeam", "FTR"])
-            df["HomeTeam"] = df["HomeTeam"].map(normalize_team).fillna(df["HomeTeam"])
-            df["AwayTeam"] = df["AwayTeam"].map(normalize_team).fillna(df["AwayTeam"])
-            dfs.append(df)
+            if resp.status_code == 200:
+                df = pd.read_csv(io.StringIO(resp.text), encoding="latin-1")
+                df = df[[c for c in cols_needed if c in df.columns]].copy()
+                df["Season"] = season
+                df["Date"] = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce")
+                df = df.dropna(subset=["Date", "HomeTeam", "AwayTeam", "FTR"])
+                df["HomeTeam"] = df["HomeTeam"].astype(str).str.strip().map(normalize_team)
+                df["AwayTeam"] = df["AwayTeam"].astype(str).str.strip().map(normalize_team)
+                dfs.append(df)
         except Exception:
-            st.warning(f"Could not load season {season} data. Please check your connection.")
+            pass
 
     if not dfs:
         return pd.DataFrame()
@@ -124,7 +193,7 @@ def fetch_football_data() -> pd.DataFrame:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_xg_data() -> pd.DataFrame:
-    """Fetch xG data from understat for 2022-2025 seasons."""
+    """Fetch xG data from understat for recent seasons."""
     try:
         from understatapi import UnderstatClient
         LEAGUE = "EPL"
@@ -159,11 +228,10 @@ def fetch_xg_data() -> pd.DataFrame:
         df_xg.loc[df_xg["season"] == "2024", "season"] = "2024/25"
         df_xg.loc[df_xg["season"] == "2025", "season"] = "2025/26"
         cutoff = pd.to_datetime("2026-05-24").date()
-        df_xg = df_xg[df_xg["date"] < cutoff].copy()
+        df_xg = df_xg[df_xg["date"] <= cutoff].copy()
         return df_xg
 
-    except Exception as e:
-        st.warning(f"Could not load xG data: {e}")
+    except Exception:
         return pd.DataFrame()
 
 
@@ -207,7 +275,7 @@ def compute_league_table(df: pd.DataFrame, season: str = None) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
 
-    teams = set(df["HomeTeam"].tolist() + df["AwayTeam"].tolist())
+    teams = set(df["HomeTeam"].dropna().tolist() + df["AwayTeam"].dropna().tolist())
     records = []
 
     for team in sorted(teams):
