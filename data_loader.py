@@ -1,9 +1,18 @@
 import pandas as pd
 import numpy as np
-import streamlit as st
 import requests
 import io
 import warnings
+
+try:
+    import streamlit as st
+except ImportError:
+    class _DummyStreamlit:
+        def cache_data(self, *args, **kwargs):
+            def decorator(f):
+                return f
+            return decorator
+    st = _DummyStreamlit()
 
 warnings.filterwarnings("ignore")
 

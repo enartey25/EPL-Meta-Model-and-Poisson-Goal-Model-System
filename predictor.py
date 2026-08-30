@@ -4,6 +4,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from feature_engine import load_assets, build_inference_row, is_promoted_or_new
+from data_loader import normalize_team
 
 # label_map from pkl: {0: 'Draw', 1: 'AwayWin', 2: 'HomeWin'}
 OUTCOME_COLORS = {
@@ -185,6 +186,10 @@ def predict_match(home_team: str, away_team: str) -> dict:
       3. Calibrated Poisson matrix
       4. Return outcome probs, most likely score, Poisson display data & metadata
     """
+    # Normalize aliases to canonical names
+    home_team = normalize_team(home_team)
+    away_team = normalize_team(away_team)
+
     # Step 1: stacked model probabilities
     stacked = _get_stacked_proba(home_team, away_team)
 
