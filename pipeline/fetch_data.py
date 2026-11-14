@@ -132,7 +132,7 @@ def update_xg_cache(fixtures: pd.DataFrame) -> pd.DataFrame:
             new = pd.DataFrame(list(pool.map(one, todo)))
         # Don't cache "no xG yet" (FotMob can publish stats a little after full time)
         new = new.dropna(subset=["home_xG", "away_xG"])
-        cache = pd.concat([cache, new], ignore_index=True)
+        cache = new if cache.empty else pd.concat([cache, new], ignore_index=True)
         os.makedirs(config.DATA_DIR, exist_ok=True)
         cache.sort_values("fotmob_id").to_csv(XG_CACHE, index=False)
     return cache
@@ -153,7 +153,7 @@ def load_match_data(today=None) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     xg = update_xg_cache(fixtures)
     fx = fixtures.merge(xg, on="fotmob_id", how="left")
-    df = results.merge(fx[["season", "HomeTeam", "AwayTeam", "fotmob_id", "home_xG", "away_xG"]],
+    df = results.merge(fx[["season", "HomeTeam", "AwayTeam", "fotmob_id", "round", "home_xG", "away_xG"]],
                        on=["season", "HomeTeam", "AwayTeam"], how="left", validate="one_to_one")
 
     missing = df["home_xG"].isna() | df["away_xG"].isna()

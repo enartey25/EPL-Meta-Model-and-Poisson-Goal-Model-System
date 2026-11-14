@@ -53,7 +53,12 @@ def load_upcoming() -> pd.DataFrame:
 
 @cache
 def load_track_record() -> pd.DataFrame:
-    return _csv("track_record.csv", dates=("Date",))
+    df = _csv("track_record.csv", dates=("Date",))
+    if not df.empty and ("round" not in df.columns or df["round"].isna().all()):
+        # Older exports had no gameweek: approximate with blocks of 10 matches per season
+        df = df.sort_values("Date", kind="stable")
+        df["round"] = df.groupby("season").cumcount() // 10 + 1
+    return df
 
 
 @cache

@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-14T00:00:00Z",
+  "title": "Design System: EPL Forecast",
+  "extensions": {
+    "colorMeta": {
+      "jet-red": { "role": "primary", "displayName": "Jet Red", "canonical": "#D7262D", "tonalRamp": ["#3A0A0C", "#5E1013", "#86171C", "#9E1A20", "#B81E25", "#D7262D", "#EE8A8D", "#FBE3E4"] },
+      "jet-red-press": { "role": "primary", "displayName": "Jet Red Press", "canonical": "#B81E25", "tonalRamp": ["#3A0A0C", "#5E1013", "#86171C", "#9E1A20", "#B81E25", "#D7262D", "#EE8A8D", "#FBE3E4"] },
+      "jet-red-pressed": { "role": "primary", "displayName": "Jet Red Pressed", "canonical": "#9E1A20", "tonalRamp": ["#3A0A0C", "#5E1013", "#86171C", "#9E1A20", "#B81E25", "#D7262D", "#EE8A8D", "#FBE3E4"] },
+      "coupon-head-red": { "role": "primary", "displayName": "Coupon Head Red", "canonical": "#C41E26", "tonalRamp": ["#36090B", "#5A0F13", "#80151B", "#A21A21", "#C41E26", "#DE5A60", "#F0A4A7", "#FBE5E6"] },
+      "carbon-purple": { "role": "secondary", "displayName": "Carbon Purple", "canonical": "#4B2E83", "tonalRamp": ["#1A0F30", "#2D1B52", "#4B2E83", "#6E57A8", "#9A87C9", "#C3B4EE", "#DCD3F0", "#F2EEFA"] },
+      "carbon-copy-lilac": { "role": "secondary", "displayName": "Carbon Copy Lilac", "canonical": "#DCD3F0", "tonalRamp": ["#1A0F30", "#2D1B52", "#4B2E83", "#6E57A8", "#9A87C9", "#C3B4EE", "#DCD3F0", "#F2EEFA"] },
+      "carbon-on-navy": { "role": "secondary", "displayName": "Carbon on Navy", "canonical": "#C3B4EE", "tonalRamp": ["#1A0F30", "#2D1B52", "#4B2E83", "#6E57A8", "#9A87C9", "#C3B4EE", "#DCD3F0", "#F2EEFA"] },
+      "carrier-navy": { "role": "neutral", "displayName": "Carrier Navy", "canonical": "#0D1B3D", "tonalRamp": ["#08122B", "#0D1B3D", "#14244A", "#24365F", "#3C4660", "#6F7DA3", "#AEB9D6", "#E6EAF4"] },
+      "carrier-navy-deep": { "role": "neutral", "displayName": "Carrier Navy Deep", "canonical": "#08122B", "tonalRamp": ["#08122B", "#0D1B3D", "#14244A", "#24365F", "#3C4660", "#6F7DA3", "#AEB9D6", "#E6EAF4"] },
+      "carrier-navy-raised": { "role": "neutral", "displayName": "Carrier Navy Raised", "canonical": "#14244A", "tonalRamp": ["#08122B", "#0D1B3D", "#14244A", "#24365F", "#3C4660", "#6F7DA3", "#AEB9D6", "#E6EAF4"] },
+      "stock-ink": { "role": "neutral", "displayName": "Stock Ink", "canonical": "#0D1B3D", "tonalRamp": ["#08122B", "#0D1B3D", "#14244A", "#24365F", "#3C4660", "#6F7DA3", "#AEB9D6", "#E6EAF4"] },
+      "stock-ink-muted": { "role": "neutral", "displayName": "Stock Ink Muted", "canonical": "#3C4660", "tonalRamp": ["#08122B", "#0D1B3D", "#14244A", "#24365F", "#3C4660", "#6F7DA3", "#AEB9D6", "#E6EAF4"] },
+      "muted-on-navy": { "role": "neutral", "displayName": "Muted on Navy", "canonical": "#AEB9D6", "tonalRamp": ["#08122B", "#0D1B3D", "#14244A", "#24365F", "#3C4660", "#6F7DA3", "#AEB9D6", "#E6EAF4"] },
+      "coupon-stock": { "role": "neutral", "displayName": "Coupon Stock", "canonical": "#F2F0EA", "tonalRamp": ["#2B2924", "#4A4740", "#6E6A61", "#949086", "#BAB6AC", "#D8D5CC", "#F2F0EA", "#FFFFFF"] },
+      "rule-on-navy": { "role": "neutral", "displayName": "Rule on Navy", "canonical": "rgba(242,240,234,0.22)", "tonalRamp": ["rgba(242,240,234,0.06)", "rgba(242,240,234,0.10)", "rgba(242,240,234,0.14)", "rgba(242,240,234,0.18)", "rgba(242,240,234,0.22)", "rgba(242,240,234,0.35)", "rgba(242,240,234,0.55)", "rgba(242,240,234,0.80)"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "One page heading per page, condensed uppercase; 36px under 760px." },
+      "headline": { "displayName": "Section Head", "purpose": "Section heads in tracked caps with a hairline rule beneath." },
+      "title": { "displayName": "Coupon Title", "purpose": "Team names on a coupon; 20px when the coupon is under 320px wide." },
+      "body": { "displayName": "Body", "purpose": "Prose, subtitles and notes; max 72ch." },
+      "label": { "displayName": "Field Label", "purpose": "Tracked caps labels for fields, stubs, ledgers, widgets and table headers." },
+      "numeral": { "displayName": "Carbon Numeral", "purpose": "Every probability, score and metric, tabular mono; 34px on issued forecast fields, 28-32px in ledgers." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "stamp-press", "value": "0.5s cubic-bezier(.16,1,.3,1); scale 1.35 to 1, opacity 0 to 1, at -9deg", "purpose": "HIT/MISS stamp pressing onto a settled coupon. Disabled under prefers-reduced-motion." },
+      { "name": "forecast-print", "value": "0.7s cubic-bezier(.16,1,.3,1); clip-path inset(0 0 100% 0) to inset(0)", "purpose": "Issued forecast printing top to bottom. Disabled under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "narrow", "value": "760px" },
+      { "name": "coupon-compact (container)", "value": "320px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single issuing action on a screen, e.g. Issue forecast.",
+      "html": "<button class=\"ds-btn-primary\">Issue forecast</button>",
+      "css": ".ds-btn-primary { background:#D7262D; color:#F2F0EA; border:1px solid #D7262D; border-radius:0; font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:700; font-size:16px; letter-spacing:.16em; text-transform:uppercase; padding:10px 28px; min-height:48px; cursor:pointer; } .ds-btn-primary:hover { background:#B81E25; border-color:#B81E25; } .ds-btn-primary:active { background:#9E1A20; border-color:#9E1A20; } .ds-btn-primary:focus-visible { outline:2px solid #F2F0EA; outline-offset:2px; }"
+    },
+    {
+      "name": "Fixture Coupon",
+      "kind": "card",
+      "refersTo": "coupon",
+      "description": "One fixture forecast: head-red band, team names, three ruled probability fields, dashed stub with the likely score.",
+      "html": "<div class=\"ds-wrap\"><div class=\"ds-cp\"><div class=\"ds-cp-hd\"><span>Sat 21 Nov · 15:00</span><span class=\"ds-mono\">No. 4812345</span></div><div class=\"ds-cp-bd\"><div class=\"ds-cp-teams\">Nott'm Forest<br>v Crystal Palace</div><div class=\"ds-fields\"><div class=\"ds-fd ds-fav\">Home<b>52</b></div><div class=\"ds-fd\">Draw<b>25</b></div><div class=\"ds-fd\">Away<b>23</b></div></div></div><div class=\"ds-stub\">Likely<b>1–0</b><i>12%</i></div></div></div>",
+      "css": ".ds-wrap { background:#0D1B3D; padding:24px; } .ds-cp { background:#F2F0EA; color:#0D1B3D; display:grid; grid-template-columns:1fr 108px; grid-template-rows:34px 1fr; min-height:212px; max-width:340px; } .ds-cp-hd { grid-column:1/-1; background:#C41E26; color:#F2F0EA; display:flex; justify-content:space-between; align-items:center; padding:6px 14px; font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:700; font-size:14px; letter-spacing:.12em; text-transform:uppercase; } .ds-mono { font-family:'IBM Plex Mono',ui-monospace,monospace; font-weight:500; font-size:12px; letter-spacing:.04em; } .ds-cp-bd { padding:14px 14px 12px; display:flex; flex-direction:column; justify-content:space-between; gap:12px; } .ds-cp-teams { font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:800; font-size:24px; line-height:1.08; text-transform:uppercase; } .ds-fields { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; } .ds-fd { border-top:1px solid #0D1B3D; padding-top:4px; font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:600; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#3C4660; } .ds-fd b { display:block; font-family:'IBM Plex Mono',ui-monospace,monospace; font-weight:500; font-size:26px; letter-spacing:0; color:#4B2E83; font-variant-numeric:tabular-nums; line-height:1.15; } .ds-fd.ds-fav { color:#0D1B3D; } .ds-fd.ds-fav b { font-weight:600; } .ds-stub { position:relative; border-left:1px dashed rgba(13,27,61,.45); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:600; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#3C4660; padding:8px; } .ds-stub b { font-family:'IBM Plex Mono',ui-monospace,monospace; font-weight:600; font-size:26px; letter-spacing:0; color:#4B2E83; } .ds-stub i { font-style:normal; font-family:'IBM Plex Mono',ui-monospace,monospace; letter-spacing:0; } .ds-stub::before, .ds-stub::after { content:''; position:absolute; left:-6px; width:11px; height:11px; background:#0D1B3D; transform:rotate(45deg); } .ds-stub::before { top:-6px; } .ds-stub::after { bottom:-6px; }"
+    },
+    {
+      "name": "Settled Stamps",
+      "kind": "custom",
+      "description": "HIT (solid 3px ink box) and MISS (2px dashed head red, struck) pressed at -9deg onto a settled coupon stub; the field that happened is boxed.",
+      "html": "<div class=\"ds-wrap\"><div class=\"ds-paper\"><span class=\"ds-stamp ds-hit\">Hit</span><span class=\"ds-stamp ds-miss\">Miss</span><div class=\"ds-actual\">Home<b>52</b></div></div></div>",
+      "css": ".ds-wrap { background:#0D1B3D; padding:24px; } .ds-paper { background:#F2F0EA; color:#0D1B3D; padding:28px 24px; display:flex; gap:28px; align-items:center; } .ds-stamp { display:inline-block; transform:rotate(-9deg); font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:800; font-size:24px; letter-spacing:.12em; padding:1px 8px; text-transform:uppercase; } .ds-hit { color:#0D1B3D; border:3px solid #0D1B3D; } .ds-miss { color:#C41E26; border:2px dashed #C41E26; text-decoration:line-through; text-decoration-thickness:2px; } .ds-actual { border:1px solid #0D1B3D; padding:3px 6px 4px; font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:600; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#3C4660; } .ds-actual b { display:block; font-family:'IBM Plex Mono',ui-monospace,monospace; font-weight:500; font-size:26px; letter-spacing:0; color:#4B2E83; }"
+    },
+    {
+      "name": "Carbon Slip",
+      "kind": "card",
+      "refersTo": "carbon-slip",
+      "description": "Season ledger as a lilac carbon copy: purple head, dashed tear, ruled single-column cells with carbon numerals.",
+      "html": "<div class=\"ds-wrap\"><div class=\"ds-slip\"><div class=\"ds-slip-hd\">Season ledger · 2026/27</div><div class=\"ds-slip-body\"><div class=\"ds-lg\"><div class=\"ds-l\">Model log loss</div><div class=\"ds-v ds-good\">1.018</div><div class=\"ds-n\">110 matches settled</div></div><div class=\"ds-lg\"><div class=\"ds-l\">Baseline</div><div class=\"ds-v\">1.087</div><div class=\"ds-n\">historical result rates</div></div></div></div></div>",
+      "css": ".ds-wrap { background:#0D1B3D; padding:24px; } .ds-slip { background:#DCD3F0; color:#4B2E83; max-width:310px; } .ds-slip-hd { background:#4B2E83; color:#F2F0EA; padding:9px 14px; font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:700; font-size:14px; letter-spacing:.12em; text-transform:uppercase; } .ds-slip-body { border-top:1px dashed rgba(75,46,131,.55); } .ds-lg { padding:12px 14px; box-shadow:0 1px 0 rgba(75,46,131,.28); } .ds-lg:last-child { box-shadow:none; } .ds-l { font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:600; font-size:13px; letter-spacing:.12em; text-transform:uppercase; } .ds-v { font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:32px; font-variant-numeric:tabular-nums; margin-top:4px; } .ds-v.ds-good { font-weight:600; } .ds-n { font-family:Barlow,system-ui,sans-serif; font-size:13px; color:#4A3D6B; margin-top:2px; }"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Top bar with wordmark and not-for-betting pill over a band of caps links; current page in stock with a jet-red underline.",
+      "html": "<div class=\"ds-top\"><div class=\"ds-bar\"><div class=\"ds-wordmark\">EPL <b>Forecast</b></div><div class=\"ds-notbet\">Academic project · not for betting</div></div><nav class=\"ds-nav\"><a href=\"#\" class=\"ds-cur\">Fixtures</a><a href=\"#\">Predictor</a><a href=\"#\">Track record</a><a href=\"#\">Analytics</a><a href=\"#\">Table</a></nav></div>",
+      "css": ".ds-top { background:#08122B; } .ds-bar { display:flex; align-items:center; gap:28px; height:52px; padding:0 24px; } .ds-wordmark { font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:800; font-size:24px; letter-spacing:.1em; text-transform:uppercase; color:#F2F0EA; } .ds-wordmark b { color:#D7262D; } .ds-notbet { margin-left:auto; font-family:Barlow,system-ui,sans-serif; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#AEB9D6; border:1px solid rgba(242,240,234,0.22); padding:6px 10px; } .ds-nav { display:flex; gap:8px; padding:0 18px; border-bottom:1px solid rgba(242,240,234,0.22); } .ds-nav a { display:flex; align-items:center; height:40px; padding:0 10px; font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-size:15px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:#AEB9D6; text-decoration:none; } .ds-nav a:hover { color:#F2F0EA; } .ds-nav a:focus-visible { outline:2px solid #F2F0EA; outline-offset:2px; } .ds-nav a.ds-cur { color:#F2F0EA; box-shadow:inset 0 -2px 0 #D7262D; }"
+    },
+    {
+      "name": "Select Field",
+      "kind": "input",
+      "refersTo": "select-field",
+      "description": "Club picker: navy-raised fill, hairline border, muted caps label above.",
+      "html": "<div class=\"ds-wrap\"><label class=\"ds-lbl\" for=\"ds-home\">Home club</label><select id=\"ds-home\" class=\"ds-select\"><option>Liverpool</option><option>Man City</option></select></div>",
+      "css": ".ds-wrap { background:#0D1B3D; padding:24px; } .ds-lbl { display:block; margin-bottom:6px; font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:600; font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:#AEB9D6; } .ds-select { width:260px; background:#14244A; color:#F2F0EA; border:1px solid rgba(242,240,234,0.22); border-radius:0; padding:10px 12px; font-family:Barlow,system-ui,sans-serif; font-size:15px; } .ds-select:hover { border-color:rgba(242,240,234,0.45); } .ds-select:focus-visible { outline:2px solid #F2F0EA; outline-offset:2px; }"
+    },
+    {
+      "name": "Folder Tabs",
+      "kind": "chip",
+      "refersTo": "tab-selected",
+      "description": "Season tabs: hairline folder tabs in caps; the selected tab is stock with ink text.",
+      "html": "<div class=\"ds-wrap\"><div class=\"ds-tabs\" role=\"tablist\"><button role=\"tab\" aria-selected=\"true\" class=\"ds-tab\">2026/27</button><button role=\"tab\" aria-selected=\"false\" class=\"ds-tab\">2025/26</button></div></div>",
+      "css": ".ds-wrap { background:#0D1B3D; padding:24px; } .ds-tabs { display:flex; gap:4px; border-bottom:1px solid rgba(242,240,234,0.22); } .ds-tab { font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:600; font-size:15px; letter-spacing:.12em; text-transform:uppercase; border:1px solid rgba(242,240,234,0.22); border-bottom:0; border-radius:0; padding:6px 16px; background:transparent; color:#F2F0EA; cursor:pointer; } .ds-tab:hover { background:#14244A; } .ds-tab:focus-visible { outline:2px solid #F2F0EA; outline-offset:2px; } .ds-tab[aria-selected=\"true\"] { background:#F2F0EA; color:#0D1B3D; }"
+    },
+    {
+      "name": "Ruled Table",
+      "kind": "custom",
+      "description": "Hairline table on navy: muted caps headers over a stock rule, mono right-aligned figures, struck-and-dashed miss markers.",
+      "html": "<div class=\"ds-wrap\"><table class=\"ds-rt\"><tr><th class=\"ds-l\">Result</th><th>% on result</th><th class=\"ds-l\">Favourite</th></tr><tr><td class=\"ds-l ds-team\">Arsenal 2–0 Chelsea</td><td>52</td><td class=\"ds-l\"><span class=\"ds-zone ds-ucl\"></span>Hit</td></tr><tr><td class=\"ds-l ds-team\">Burnley 2–1 Leeds</td><td>32</td><td class=\"ds-l\"><span class=\"ds-zone ds-rel\"></span><s>Miss</s></td></tr></table></div>",
+      "css": ".ds-wrap { background:#0D1B3D; padding:24px; } .ds-rt { width:100%; border-collapse:collapse; font-size:15px; } .ds-rt th { font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:600; font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:#AEB9D6; text-align:right; padding:8px 10px; border-bottom:1px solid #F2F0EA; } .ds-rt td { padding:9px 10px; border-bottom:1px solid rgba(242,240,234,0.22); text-align:right; font-family:'IBM Plex Mono',ui-monospace,monospace; font-variant-numeric:tabular-nums; color:#F2F0EA; } .ds-rt .ds-l { text-align:left; } .ds-rt td.ds-team { font-family:Barlow,system-ui,sans-serif; font-weight:600; } .ds-rt tr:hover td { background:#14244A; } .ds-zone { display:inline-block; width:8px; height:8px; margin-right:8px; vertical-align:middle; } .ds-ucl { background:#C3B4EE; } .ds-rel { border:1px dashed #D7262D; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Ticket Wallet",
+    "overview": "Every forecast is printed matter: a coupon of off-white stock issued on a carrier-navy ground, torn along a dashed stub, and later rubber-stamped with how it went. The system borrows the vernacular of jet-age airline tickets and fare slips (condensed tracked caps, ruled fields, monospaced carbon numerals, a lilac carbon copy for derived figures) and applies it with the discipline of a data product. The navy is the wallet; stock is the only bright surface; red marks the heads of issued documents and the single action that issues one.\n\nDensity is moderate and gridded. Coupons sit in an auto-filling wallet grid beside a narrower right-hand rail; tables and charts are hairline-ruled on navy, never boxed in cards. Nothing is rounded and nothing floats: depth comes from paper colour against the ground, not from shadows. Settled outcomes are always shown, hits and misses alike, and the miss is drawn in a different line form, not only a different colour.\n\nThe shipped build departs from its direction notes in one recorded place: coupon and forecast heads use a deeper head red (coupon-head-red) rather than jet-red, because stock-coloured caps on that red read more firmly at 12-15px, and the MISS stamp uses the same head red for contrast on stock. Jet-red remains the primary action, the wordmark accent, the current-page underline and the \"worse than baseline\" series in charts.",
+    "keyCharacteristics": [
+      "Carrier navy ground with coupon-stock documents; zero corner radius everywhere.",
+      "Condensed tracked caps for heads, labels, tabs and nav; monospaced tabular numerals for every probability and score.",
+      "One-pixel hairline rules and dashed tear lines carry structure.",
+      "Rubber stamps settle a coupon: solid boxed HIT, dashed struck MISS.",
+      "Derived and aggregate figures live on a lilac carbon-copy slip."
+    ],
+    "rules": [
+      { "name": "The Two Papers Rule", "body": "Navy is the ground and stock is the paper. Any surface a reader should pick up and read as one forecast is stock; everything else stays on navy with hairlines.", "section": "colors" },
+      { "name": "The Red Issues Rule", "body": "Red marks issuance only: document heads, the action that issues a forecast, the current page, and adverse results. It is never decoration or a generic highlight.", "section": "colors" },
+      { "name": "The Carbon Numerals Rule", "body": "Numbers printed on stock are carbon purple; numbers on navy are stock (or carbon-on-navy when they mean \"model ahead\").", "section": "colors" },
+      { "name": "The Tracked Caps Rule", "body": "Anything that names a field, a document or a place to go is condensed, uppercase and tracked 0.08-0.16em. Running prose is never set in caps.", "section": "typography" },
+      { "name": "The Mono Figures Rule", "body": "Every probability, score, log loss and count is IBM Plex Mono with tabular figures, so columns of coupons align by eye.", "section": "typography" },
+      { "name": "The Paper Not Plastic Rule", "body": "Surfaces never cast shadows or glow. A thing is \"above\" the ground only by being paper-coloured.", "section": "elevation" },
+      { "name": "The One Pixel Rule", "body": "Rules are one pixel. The only heavier lines are the HIT stamp (3px), the MISS stamp (2px dashed) and the outlined \"what happened\" field (1px box).", "section": "shapes" },
+      { "name": "The Line Form Rule", "body": "Outcome is carried by line form as well as colour: solid box for HIT, dashed and struck through for MISS; in tables, a filled carbon square for hit and a dashed red square with struck text for miss.", "section": "shapes" }
+    ],
+    "dos": [
+      "**Do** print every forecast or settled result as a stock coupon with a head-red band, ruled fields and a dashed stub.",
+      "**Do** set every probability and score in IBM Plex Mono with tabular figures; carbon purple on stock, stock on navy.",
+      "**Do** keep corners square (0px) and rules at one pixel; use dashed lines only where paper tears or for a miss.",
+      "**Do** show misses alongside hits, distinguished by line form (dashed, struck) as well as by red.",
+      "**Do** keep the academic not-for-betting pill visible in the top bar on every page.",
+      "**Do** put derived and aggregate figures on the lilac carbon slip or strip, not on a new card style.",
+      "**Do** honour reduced motion: stamps and the forecast print appear without animation."
+    ],
+    "donts": [
+      "**Don't** round any corner or add drop shadows; depth is stock against navy only.",
+      "**Don't** use jet red as decoration or a generic highlight; it marks issuance, the current page, the one primary action, and adverse results.",
+      "**Don't** introduce a second primary button on a screen.",
+      "**Don't** convey hit or miss by colour alone.",
+      "**Don't** set prose in caps or numerals in the display or body face.",
+      "**Don't** box charts or tables in stock cards; they live on navy behind hairlines."
+    ]
+  }
+}
