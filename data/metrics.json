@@ -1,0 +1,98 @@
+{
+  "generated_at": "2026-11-14T00:12:19.649863+00:00",
+  "data_through": "2026-11-08",
+  "current_season": "2026/27",
+  "matches": 1620,
+  "trained_at": "2026-11-14T00:12:19.649863+00:00",
+  "retrain_reason": "forced",
+  "meta_inputs": [
+    "rf",
+    "poisson"
+  ],
+  "holdout": {
+    "train_seasons": [
+      "2022/23",
+      "2023/24"
+    ],
+    "validation_season": "2024/25",
+    "test_season": "2025/26",
+    "null_baseline": {
+      "log_loss": 1.0871717131302185,
+      "brier": 0.6581336565096954,
+      "n": 380
+    },
+    "random_forest": {
+      "log_loss": 1.035199150509987,
+      "brier": 0.6221228613136667,
+      "n": 380
+    },
+    "poisson": {
+      "log_loss": 1.0319726448606295,
+      "brier": 0.6202260625092325,
+      "n": 380
+    },
+    "stack": {
+      "log_loss": 1.0237921609939493,
+      "brier": 0.616064498234776,
+      "n": 380
+    }
+  },
+  "track_record": {
+    "2025/26": {
+      "model": {
+        "log_loss": 1.0259120186211839,
+        "brier": 0.6178054114659505,
+        "n": 380
+      },
+      "null_baseline": {
+        "log_loss": 1.0845110721635958,
+        "brier": 0.6562511542012927,
+        "n": 380
+      },
+      "favourite_hit_rate": 0.48157894736842105
+    },
+    "2026/27": {
+      "model": {
+        "log_loss": 1.0346396873457835,
+        "brier": 0.6187461745302424,
+        "n": 100
+      },
+      "null_baseline": {
+        "log_loss": 1.0833741948115572,
+        "brier": 0.6560851800554017,
+        "n": 100
+      },
+      "favourite_hit_rate": 0.46
+    }
+  },
+  "elo": {
+    "Crystal Palace": 1407.3,
+    "Arsenal": 1683.8,
+    "Fulham": 1466.0,
+    "Liverpool": 1561.5,
+    "Bournemouth": 1554.9,
+    "Aston Villa": 1533.6,
+    "Leeds": 1510.0,
+    "Wolves": 1395.8,
+    "Newcastle": 1463.3,
+    "Nott'm Forest": 1456.2,
+    "Tottenham": 1450.2,
+    "Southampton": 1380.6,
+    "Everton": 1505.4,
+    "Chelsea": 1496.7,
+    "Leicester": 1413.6,
+    "Brentford": 1510.6,
+    "Man United": 1503.0,
+    "Brighton": 1579.4,
+    "West Ham": 1464.1,
+    "Man City": 1603.5,
+    "Burnley": 1374.2,
+    "Luton": 1438.0,
+    "Sheffield United": 1421.1,
+    "Ipswich": 1410.1,
+    "Sunderland": 1449.4,
+    "Coventry": 1395.3,
+    "Hull": 1428.3
+  },
+  "xg_proxy_matches": 0
+}
