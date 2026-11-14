@@ -1,6 +1,6 @@
-[server]
-# Do not expose file system paths or internal details in error pages
-showErrorDetails = false
+[client]
+# Do not expose stack traces or internal details in error messages
+showErrorDetails = "none"
 
 [browser]
 gatherUsageStats = false

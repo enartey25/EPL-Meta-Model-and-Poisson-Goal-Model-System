@@ -70,14 +70,17 @@ def fixtures_page():
         st.markdown(f'<h1 class="pg">Gameweek {int(rnd)}</h1><p class="pgsub">{span} · issued {issued} · '
                     f'home / draw / away probabilities in %, and the single most likely score</p>', unsafe_allow_html=True)
 
+    def wallet(rows):
+        return '<div class="wallet">' + "".join(
+            ui.coupon(r.HomeTeam, r.AwayTeam, r.P_Home, r.P_Draw, r.P_Away,
+                      kickoff_label(r.kickoff_utc), f"No. {int(r.fotmob_id)}",
+                      "Likely", r.Most_Likely_Score, f"{r.P_Most_Likely_Score * 100:.0f}%")
+            for r in rows.itertuples()) + "</div>"
+
     left, right = st.columns([3.3, 1], gap="large")
     with left:
         if not upcoming.empty:
-            cps = "".join(ui.coupon(r.HomeTeam, r.AwayTeam, r.P_Home, r.P_Draw, r.P_Away,
-                                    kickoff_label(r.kickoff_utc), f"No. {int(r.fotmob_id)}",
-                                    "Likely", r.Most_Likely_Score, f"{r.P_Most_Likely_Score * 100:.0f}%")
-                          for r in upcoming.itertuples())
-            st.markdown(f'<div class="wallet">{cps}</div>', unsafe_allow_html=True)
+            st.markdown(wallet(upcoming[upcoming["round"] == rnd]), unsafe_allow_html=True)
     with right:
         tr = metrics.get("track_record", {}).get(CURRENT)
         if tr:
@@ -88,6 +91,11 @@ def fixtures_page():
             ]), unsafe_allow_html=True)
             st.markdown('<p class="note">Lower log loss is better. Coupons are scored walk-forward: models frozen '
                         'at the start of the season, features updated before each match.</p>', unsafe_allow_html=True)
+
+    later = upcoming[upcoming["round"] != rnd] if not upcoming.empty else upcoming
+    for r2, rows in later.groupby("round", sort=True) if not later.empty else []:
+        st.markdown(f'<h2 class="sec">Gameweek {int(r2)}, issued early</h2>', unsafe_allow_html=True)
+        st.markdown(wallet(rows), unsafe_allow_html=True)
 
     rec = settled_with_logs(CURRENT)
     if not rec.empty:
