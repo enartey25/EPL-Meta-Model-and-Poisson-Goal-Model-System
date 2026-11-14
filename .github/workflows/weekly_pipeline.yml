@@ -1,30 +1,37 @@
-name: EPL Pipeline - Weekly State Update & 5-Gameweek Model Retraining
+name: Weekly pipeline - data refresh, track record and model retraining
 
 on:
   schedule:
-    # Runs automatically every Wednesday at 04:00 AM UTC
+    # Every Wednesday at 04:00 UTC
     - cron: '0 4 * * 3'
   workflow_dispatch:
     inputs:
       force_retrain:
-        description: 'Force full XGBoost, RF & Meta-Learner retraining (ignores 50-match threshold)'
+        description: 'Force a full retrain (ignores the 50-match threshold)'
         required: false
         type: boolean
         default: false
+  push:
+    # Rebuild the assets whenever the model code changes
+    paths:
+      - 'pipeline/**'
+      - 'inference_utils.py'
+      - 'requirements.txt'
+      - '.github/workflows/weekly_pipeline.yml'
 
 permissions:
   contents: write
 
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   update-pipeline:
-    name: Run Dual-Cadence Pipeline
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -32,31 +39,30 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Execute Pipeline
+      - name: Run pipeline
         run: |
           FLAGS=""
-          if [ "${{ github.event.inputs.force_retrain }}" = "true" ]; then
+          if [ "${{ github.event.inputs.force_retrain }}" = "true" ] || [ "${{ github.event_name }}" = "push" ]; then
             FLAGS="--force-retrain"
           fi
-          python -m pipeline.run_pipeline --output epl_predictor_assets.pkl $FLAGS
+          python -m pipeline.run_pipeline $FLAGS
 
-      - name: Run Smoke Test
-        run: |
-          python -c "from predictor import predict_match; r = predict_match('Arsenal', 'Chelsea'); print('Smoke test OK:', r['predicted_outcome'], r['confidence'])"
+      - name: Smoke test
+        run: python predictor.py
 
-      - name: Commit and Push Updated Assets
+      - name: Commit updated assets
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add epl_predictor_assets.pkl
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add epl_predictor_assets.pkl data/
           if git diff --staged --quiet; then
-            echo "No changes in model assets. Skipping commit."
+            echo "No changes to commit."
           else
-            git commit -m "chore(pipeline): automated weekly state update / 5-gameweek retraining [skip ci]"
-            git push origin main
+            git commit -m "chore(pipeline): automated data refresh and model update [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
           fi

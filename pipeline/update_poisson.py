@@ -1,48 +1,56 @@
+"""Leakage-free, opponent-adjusted Poisson goal model.
+
+lambda_home = HomeAttack(home team) * AwayDefence(away team) / league home average
+lambda_away = AwayAttack(away team) * HomeDefence(home team) / league away average
+
+"Performance" blends goals and xG: (goals + xG) / 2. Strengths are
+venue-specific exponentially weighted means, shifted one match so a fixture
+only sees earlier results; league averages are expanding means of past matches.
 """
-Leakage-free Poisson goal expectancy calculation module.
-Computes expanding-mean home/away goal expectancies for the generative Poisson score grid.
-"""
-import logging
+import numpy as np
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+from inference_utils import outcome_probs, score_matrix
+from pipeline import config
 
 
-def compute_leakage_free_poisson(df_input: pd.DataFrame) -> pd.DataFrame:
-    """Calculate leakage-free rolling goal expectancy strengths using blended actual goals and xG."""
-    temp_df = df_input.sort_values(["Date"]).copy()
+def add_poisson_strengths(df: pd.DataFrame, halflife=config.POISSON_HALFLIFE):
+    d = df.copy()  # same index as df, so rows stay aligned with the feature frame
+    d["Home_Perf_For"] = (d["FTHG"] + d["home_xG"]) / 2
+    d["Away_Perf_For"] = (d["FTAG"] + d["away_xG"]) / 2
 
-    # Blended goal and xG metrics
-    temp_df["Home_Perf_For"] = (temp_df["FTHG"] + temp_df["home_xG"]) / 2.0
-    temp_df["Home_Perf_Against"] = (temp_df["FTAG"] + temp_df["away_xG"]) / 2.0
-    temp_df["Away_Perf_For"] = (temp_df["FTAG"] + temp_df["away_xG"]) / 2.0
-    temp_df["Away_Perf_Against"] = (temp_df["FTHG"] + temp_df["home_xG"]) / 2.0
+    prev_ewm = lambda s: s.shift().ewm(halflife=halflife).mean()
+    gh = d.groupby("HomeTeam", observed=True)
+    ga = d.groupby("AwayTeam", observed=True)
+    d["Home_Attack"] = gh["Home_Perf_For"].transform(prev_ewm)
+    d["Home_Defence"] = gh["Away_Perf_For"].transform(prev_ewm)
+    d["Away_Attack"] = ga["Away_Perf_For"].transform(prev_ewm)
+    d["Away_Defence"] = ga["Home_Perf_For"].transform(prev_ewm)
 
-    # Group by team and compute expanding prior means (shift excludes current match)
-    home_col = "HomeTeam_orig" if "HomeTeam_orig" in temp_df.columns else "HomeTeam"
-    away_col = "AwayTeam_orig" if "AwayTeam_orig" in temp_df.columns else "AwayTeam"
+    d["League_Home"] = d["Home_Perf_For"].shift().expanding().mean().fillna(config.PRIOR_HOME)
+    d["League_Away"] = d["Away_Perf_For"].shift().expanding().mean().fillna(config.PRIOR_AWAY)
+    d["Home_Attack"] = d["Home_Attack"].fillna(d["League_Home"])
+    d["Away_Defence"] = d["Away_Defence"].fillna(d["League_Home"])
+    d["Away_Attack"] = d["Away_Attack"].fillna(d["League_Away"])
+    d["Home_Defence"] = d["Home_Defence"].fillna(d["League_Away"])
 
-    temp_df["Home_Avg_Scored"] = temp_df.groupby(home_col)["Home_Perf_For"].transform(
-        lambda x: x.shift().expanding().mean()
-    )
-    temp_df["Home_Avg_Conceded"] = temp_df.groupby(home_col)["Home_Perf_Against"].transform(
-        lambda x: x.shift().expanding().mean()
-    )
-    temp_df["Away_Avg_Scored"] = temp_df.groupby(away_col)["Away_Perf_For"].transform(
-        lambda x: x.shift().expanding().mean()
-    )
-    temp_df["Away_Avg_Conceded"] = temp_df.groupby(away_col)["Away_Perf_Against"].transform(
-        lambda x: x.shift().expanding().mean()
-    )
+    d["Lambda_Home"] = (d["Home_Attack"] * d["Away_Defence"] / d["League_Home"]).clip(*config.LAMBDA_CLIP)
+    d["Lambda_Away"] = (d["Away_Attack"] * d["Home_Defence"] / d["League_Away"]).clip(*config.LAMBDA_CLIP)
 
-    # Fill initial matches with empirical league priors
-    league_avg_home = (temp_df["FTHG"].mean() + temp_df["home_xG"].mean()) / 2.0
-    league_avg_away = (temp_df["FTAG"].mean() + temp_df["away_xG"].mean()) / 2.0
+    # Latest strengths (including each team's most recent match) for upcoming fixtures
+    last_ewm = lambda s: s.ewm(halflife=halflife).mean().iloc[-1]
+    poisson_state = {
+        "home_attack": {int(k): float(v) for k, v in gh["Home_Perf_For"].apply(last_ewm).items()},
+        "home_defence": {int(k): float(v) for k, v in gh["Away_Perf_For"].apply(last_ewm).items()},
+        "away_attack": {int(k): float(v) for k, v in ga["Away_Perf_For"].apply(last_ewm).items()},
+        "away_defence": {int(k): float(v) for k, v in ga["Home_Perf_For"].apply(last_ewm).items()},
+        "league_home": float(d["Home_Perf_For"].mean()),
+        "league_away": float(d["Away_Perf_For"].mean()),
+        "clip": config.LAMBDA_CLIP,
+    }
+    return d, poisson_state
 
-    temp_df["Home_Avg_Scored"] = temp_df["Home_Avg_Scored"].fillna(league_avg_home)
-    temp_df["Home_Avg_Conceded"] = temp_df["Home_Avg_Conceded"].fillna(league_avg_away)
-    temp_df["Away_Avg_Scored"] = temp_df["Away_Avg_Scored"].fillna(league_avg_away)
-    temp_df["Away_Avg_Conceded"] = temp_df["Away_Avg_Conceded"].fillna(league_avg_home)
 
-    logger.info(f"Poisson goal expectancy computed. League priors: Home={league_avg_home:.2f}, Away={league_avg_away:.2f}")
-    return temp_df
+def poisson_probs(lam_h, lam_a) -> np.ndarray:
+    return np.array([outcome_probs(score_matrix(h, a, config.MAX_GOALS))
+                     for h, a in zip(lam_h, lam_a)]).reshape(-1, 3)
