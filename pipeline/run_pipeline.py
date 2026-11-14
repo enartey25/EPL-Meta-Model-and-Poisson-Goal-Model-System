@@ -1,159 +1,187 @@
-"""
-Master orchestrator for the EPL Match Predictor pipeline.
-Features a dual-cadence architecture:
-  - Weekly: Ingests completed matches, updates sequential Elo and rolling xG state.
-  - Every 5 Gameweeks (~50 fixtures): Fully retrains XGBoost, Random Forest, and Stacking Meta-Learner.
+"""Weekly pipeline: ingest results and xG, rebuild features and Poisson strengths,
+retrain the stack every ~5 gameweeks (or when the club list or asset format
+changes), score the track record, forecast upcoming fixtures, and export.
+
+    python -m pipeline.run_pipeline               # weekly run
+    python -m pipeline.run_pipeline --force-retrain
+    python -m pipeline.run_pipeline --dry-run     # everything except writing files
 """
 import argparse
 import logging
 import os
-import pickle
 import sys
 import time
+from datetime import datetime, timezone
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, PROJECT_ROOT)
+import numpy as np
+import pandas as pd
 
-from pipeline.fetch_data import load_and_merge_pipeline_data
-from pipeline.build_features import build_pipeline_features
-from pipeline.update_poisson import compute_leakage_free_poisson
-from pipeline.train_models import train_stacking_pipeline
-from pipeline.export_assets import export_assets_bundle
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-RETRAIN_BATCH_THRESHOLD = 50  # 5 Gameweeks = 50 fixtures
+import inference_utils as iu  # noqa: E402
+from pipeline import config  # noqa: E402
+from pipeline.build_features import build_features, build_team_map, encode  # noqa: E402
+from pipeline.export_assets import load_existing_assets, write_assets, write_csv, write_json  # noqa: E402
+from pipeline.fetch_data import load_match_data  # noqa: E402
+from pipeline.train_models import fit_stack, holdout_evaluation, scores, season_record  # noqa: E402
+from pipeline.update_poisson import add_poisson_strengths  # noqa: E402
+from pipeline.validate import parity_check, sanity_check_assets  # noqa: E402
 
-
-def setup_logging(log_level: str = "INFO") -> None:
-    """Configure structured logging."""
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper(), logging.INFO),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+logger = logging.getLogger("pipeline")
+FORECAST_LOG = "forecast_log.csv"
+UPCOMING_WINDOW_DAYS = 10
 
 
-def load_existing_models_and_count(asset_path: str) -> tuple[dict, int]:
-    """Load existing base models and tracking metadata if available."""
-    if not os.path.exists(asset_path):
-        return None, 0
+def _needs_retrain(existing, team_map, n_matches, force, threshold):
+    if force:
+        return True, "forced"
+    if existing is None:
+        return True, "no existing assets"
+    if existing.get("format_version") != config.ASSET_FORMAT_VERSION:
+        return True, "asset format changed"
+    if existing.get("team_map") != team_map:
+        return True, "club list changed (team codes shift)"
+    new = n_matches - existing.get("last_trained_count", 0)
+    if new >= threshold:
+        return True, f"{new} new matches since last retrain (threshold {threshold})"
+    return False, f"{new} new matches since last retrain; next full retrain in {threshold - new}"
+
+
+def _record_summary(rec: pd.DataFrame) -> dict:
+    y = rec["FTR"].to_numpy()
+    model = scores(y, rec[["P_Draw", "P_Away", "P_Home"]].to_numpy())
+    null = scores(y, rec[["Null_Draw", "Null_Away", "Null_Home"]].to_numpy())
+    fav_hit = float((rec[["P_Draw", "P_Away", "P_Home"]].to_numpy().argmax(1) == y).mean())
+    return {"model": model, "null_baseline": null, "favourite_hit_rate": fav_hit}
+
+
+def _upcoming(fixtures, current_season, now):
+    up = fixtures[(~fixtures["finished"]) & (fixtures["season"] == current_season)
+                  & (fixtures["kickoff_utc"] >= now - pd.Timedelta(hours=3))].sort_values("kickoff_utc")
+    if up.empty:
+        return up
+    first = up["kickoff_utc"].iloc[0]
+    return up[up["kickoff_utc"] <= first + pd.Timedelta(days=UPCOMING_WINDOW_DAYS)]
+
+
+def run(force_retrain=False, dry_run=False, retrain_threshold=config.RETRAIN_BATCH_THRESHOLD) -> bool:
+    t0 = time.time()
+    now = pd.Timestamp.now(tz="UTC")
+    current_season = config.season_label(config.current_season_start())
     try:
-        with open(asset_path, "rb") as f:
-            assets = pickle.load(f)
-        models_dict = {
-            "stacked_meta_model": assets.get("stacked_meta_model"),
-            "best_xgb_model": assets.get("best_xgb_model"),
-            "best_rf_model": assets.get("best_rf_model"),
+        # 1. Data
+        logger.info("[1/6] Ingesting results (football-data.co.uk) and xG (FotMob)")
+        played, fixtures = load_match_data()
+
+        # 2. Features
+        logger.info("[2/6] Building pre-match features")
+        team_map = build_team_map(played, fixtures)
+        enc = encode(played, team_map)
+        enc["HomeTeam_name"], enc["AwayTeam_name"] = played["HomeTeam"].values, played["AwayTeam"].values
+        df, state = build_features(enc)
+        dfp, poisson_state = add_poisson_strengths(df)
+        parity_check(df, team_map)
+
+        seasons = list(dict.fromkeys(df["season"]))  # chronological
+        complete = [s for s in seasons if s != current_season]
+
+        # 3. Models
+        existing = load_existing_assets()
+        retrain, why = _needs_retrain(existing, team_map, len(df), force_retrain, retrain_threshold)
+        if retrain:
+            logger.info(f"[3/6] Full retrain: {why}")
+            rf, meta, n_meta = fit_stack(df, dfp, seasons)
+            trained_at, trained_count = now.isoformat(), len(df)
+        else:
+            logger.info(f"[3/6] Weekly state update: {why}")
+            rf, meta = existing["rf_model"], existing["meta_model"]
+            n_meta = existing.get("meta_training_rows")
+            trained_at, trained_count = existing["trained_at"], existing["last_trained_count"]
+
+        assets = {
+            "format_version": config.ASSET_FORMAT_VERSION,
+            "meta_model": meta, "meta_inputs": list(config.META_INPUTS), "meta_transform": config.META_TRANSFORM,
+            "rf_model": rf, "xgb_model": None,
+            "team_map": team_map, "state": state, "poisson_state": poisson_state,
+            "elo_params": config.ELO_PARAMS, "window": config.FORM_WINDOW,
+            "final_features": config.FINAL_FEATURES, "current_season": current_season,
+            "trained_at": trained_at, "last_trained_count": trained_count, "meta_training_rows": n_meta,
+            "state_updated_at": now.isoformat(), "data_through": df["Date"].max().date().isoformat(),
         }
-        last_count = assets.get("last_trained_count", len(assets.get("df_poisson", [])))
-        return models_dict, last_count
-    except Exception:
-        return None, 0
+        sanity_check_assets(assets)
 
+        # 4. Evaluation and track record
+        logger.info("[4/6] Scoring the holdout season and the walk-forward track record")
+        holdout = holdout_evaluation(df, dfp, complete)
+        record_seasons = [s for s in seasons if seasons.index(s) >= config.MIN_PRIOR_SEASONS_FOR_META + 1]
+        record = pd.concat([season_record(df, dfp, s, seasons) for s in record_seasons], ignore_index=True)
+        record_summary = {s: _record_summary(record[record["season"] == s]) for s in record_seasons}
 
-def run(
-    output_path: str = "epl_predictor_assets.pkl",
-    dry_run: bool = False,
-    force_retrain: bool = False,
-    retrain_threshold: int = RETRAIN_BATCH_THRESHOLD,
-) -> bool:
-    """Execute the dual-cadence state update & 5-gameweek model retraining pipeline."""
-    start_time = time.time()
-    logger = logging.getLogger("pipeline")
-    logger.info("=" * 75)
-    logger.info("STARTING EPL MATCH PREDICTOR PIPELINE (DUAL-CADENCE)")
-    logger.info(f"Output: {output_path} | Force Retrain: {force_retrain} | Retrain Threshold: {retrain_threshold} matches")
-    logger.info("=" * 75)
+        # 5. Upcoming fixtures
+        logger.info("[5/6] Forecasting upcoming fixtures")
+        up = _upcoming(fixtures, current_season, now)
+        upcoming = pd.DataFrame()
+        if not up.empty:
+            fx = up[["HomeTeam", "AwayTeam", "season"]].reset_index(drop=True)
+            outcomes, _ = iu.predict_outcomes(fx, assets)
+            upcoming, _ = iu.predict_scores(outcomes, assets, config.MAX_GOALS)
+            upcoming.insert(0, "kickoff_utc", up["kickoff_utc"].values)
+            upcoming.insert(0, "round", up["round"].values)
+            upcoming.insert(0, "fotmob_id", up["fotmob_id"].values)
 
-    try:
-        # Step 1: Ingest match and xG data
-        logger.info("[1/5] Ingesting match results and expected goals data...")
-        df_raw = load_and_merge_pipeline_data()
-        current_match_count = len(df_raw)
-        logger.info(f"Ingested {current_match_count} total fixtures.")
-
-        # Step 2: Build sequential features and state
-        logger.info("[2/5] Constructing chronological features (Elo, rolling xG, variance)...")
-        df_feat, state, team_map = build_pipeline_features(df_raw)
-
-        # Step 3: Compute expanding Poisson goal expectancies
-        logger.info("[3/5] Computing expanding Poisson goal expectancies...")
-        df_poisson = compute_leakage_free_poisson(df_feat)
-
-        # Step 4: Check if full model retraining is required
-        full_out_path = os.path.join(PROJECT_ROOT, output_path) if not os.path.isabs(output_path) else output_path
-        existing_models, last_trained_count = load_existing_models_and_count(full_out_path)
-
-        new_matches_since_train = current_match_count - last_trained_count
-        should_retrain = (
-            force_retrain
-            or existing_models is None
-            or existing_models.get("stacked_meta_model") is None
-            or new_matches_since_train >= retrain_threshold
-        )
-
-        if should_retrain:
-            logger.info(
-                f"[4/5] FULL RETRAINING TRIGGERED: {new_matches_since_train} new fixtures accumulated "
-                f"(Threshold: {retrain_threshold}) or force flag active."
-            )
-            models_dict = train_stacking_pipeline(df_feat)
-            new_last_trained_count = current_match_count
+        # 6. Export
+        keep = [c for c in ["Date", "season", "FTHG", "FTAG", "FTR", "HS", "AS", "HST", "AST", "HC", "AC",
+                            "HY", "AY", "HR", "AR", "home_xG", "away_xG", "xg_is_proxy",
+                            "Home_PreMatch_Elo", "Away_PreMatch_Elo"] if c in df.columns]
+        played_out = df[keep].copy()
+        played_out.insert(1, "HomeTeam", df["HomeTeam_name"].values)
+        played_out.insert(2, "AwayTeam", df["AwayTeam_name"].values)
+        played_out["FTR"] = played_out["FTR"].map({2: "H", 1: "A", 0: "D"})
+        played_out["Lambda_Home"] = dfp["Lambda_Home"].round(3).values
+        played_out["Lambda_Away"] = dfp["Lambda_Away"].round(3).values
+        inv = {v: k for k, v in team_map.items()}
+        elo_now = {inv[k]: round(float(v), 1) for k, v in state["elo"].items()}
+        metrics = {
+            "generated_at": now.isoformat(), "data_through": assets["data_through"],
+            "current_season": current_season, "matches": len(df), "trained_at": trained_at,
+            "retrain_reason": why, "meta_inputs": list(config.META_INPUTS),
+            "holdout": holdout, "track_record": record_summary, "elo": elo_now,
+            "xg_proxy_matches": int(played["xg_is_proxy"].sum()),
+        }
+        if dry_run:
+            logger.info("[6/6] Dry run: nothing written")
         else:
-            logger.info(
-                f"[4/5] WEEKLY STATE UPDATE: {new_matches_since_train} new matches since last full retrain. "
-                f"Updating state, Elo ratings & Poisson matrix (Full retrain in {retrain_threshold - new_matches_since_train} matches)."
-            )
-            models_dict = existing_models
-            new_last_trained_count = last_trained_count
-
-        # Step 5: Export assets bundle
-        if not dry_run:
-            logger.info(f"[5/5] Serializing updated asset bundle to {output_path}...")
-            export_assets_bundle(
-                models_dict=models_dict,
-                state=state,
-                team_map=team_map,
-                df_poisson=df_poisson,
-                output_path=full_out_path,
-                last_trained_count=new_last_trained_count,
-            )
-
-            # Step 6: Smoke test inference
-            logger.info("Running smoke test inference...")
-            from predictor import predict_match
-            test_res = predict_match("Arsenal", "Chelsea")
-            logger.info(f"Smoke test result: Arsenal vs Chelsea -> {test_res['predicted_outcome']} ({test_res['confidence']*100:.1f}%)")
-        else:
-            logger.info("[5/5] DRY RUN active: Skipping asset export.")
-
-        elapsed = time.time() - start_time
-        logger.info("=" * 75)
-        logger.info(f"PIPELINE COMPLETED SUCCESSFULLY IN {elapsed:.2f}s")
-        logger.info("=" * 75)
+            logger.info("[6/6] Exporting")
+            write_assets(assets)
+            write_csv(played_out, "matches.csv")
+            write_csv(record, "track_record.csv")
+            write_csv(upcoming, "upcoming.csv")
+            write_json(metrics, "metrics.json")
+            if not upcoming.empty:
+                log_path = os.path.join(config.DATA_DIR, FORECAST_LOG)
+                log = pd.read_csv(log_path) if os.path.exists(log_path) else pd.DataFrame(columns=["fotmob_id"])
+                new = upcoming[~upcoming["fotmob_id"].isin(log["fotmob_id"])].copy()
+                if len(new):
+                    new.insert(0, "logged_at", now.isoformat())
+                    new["model_trained_at"] = trained_at
+                    write_csv(pd.concat([log, new], ignore_index=True), FORECAST_LOG)
+        logger.info(f"Pipeline finished in {time.time() - t0:.1f}s")
         return True
-
     except Exception as e:
-        logger.exception(f"Pipeline execution failed with error: {e}")
+        logger.exception(f"Pipeline failed: {e}")
         return False
 
 
 def main():
-    parser = argparse.ArgumentParser(description="EPL Match Predictor Dual-Cadence Pipeline")
-    parser.add_argument("--output", type=str, default="epl_predictor_assets.pkl", help="Path to save epl_predictor_assets.pkl")
-    parser.add_argument("--dry-run", action="store_true", help="Run without overwriting assets")
-    parser.add_argument("--force-retrain", action="store_true", help="Force full model retraining regardless of match threshold")
-    parser.add_argument("--retrain-threshold", type=int, default=RETRAIN_BATCH_THRESHOLD, help="Match count threshold for full retraining (default: 50)")
-    parser.add_argument("--log-level", type=str, default="INFO", help="Logging level (DEBUG, INFO, WARNING, ERROR)")
-    args = parser.parse_args()
-
-    setup_logging(args.log_level)
-    success = run(
-        output_path=args.output,
-        dry_run=args.dry_run,
-        force_retrain=args.force_retrain,
-        retrain_threshold=args.retrain_threshold,
-    )
-    sys.exit(0 if success else 1)
+    ap = argparse.ArgumentParser(description="EPL forecasting pipeline")
+    ap.add_argument("--force-retrain", action="store_true")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--retrain-threshold", type=int, default=config.RETRAIN_BATCH_THRESHOLD)
+    ap.add_argument("--log-level", default="INFO")
+    args = ap.parse_args()
+    logging.basicConfig(level=args.log_level.upper(), format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                        datefmt="%H:%M:%S")
+    sys.exit(0 if run(args.force_retrain, args.dry_run, args.retrain_threshold) else 1)
 
 
 if __name__ == "__main__":

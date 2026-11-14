@@ -1,222 +1,176 @@
-"""
-Data ingestion module for the EPL Match Predictor pipeline.
-Fetches match records from football-data.co.uk and expected goals (xG) from Understat,
-with automatic fallback to cached baseline data when offline or firewalled.
+"""Data ingestion: match results from football-data.co.uk, match-level xG and
+fixture lists from FotMob.
+
+Understat (the original xG source, via ``understatapi``) has been offline
+site-wide, so xG now comes from FotMob's public match API. Fetched xG is cached
+in ``data/xg_fotmob.csv`` (committed), so a weekly run only requests matches
+played since the last run.
 """
 import io
 import logging
 import os
-import pickle
-import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+import numpy as np
 import pandas as pd
 import requests
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_loader import (
-    TEAM_NAME_MAP,
-    UNDERSTAT_MAP,
-    normalize_team,
-    normalize_understat,
-)
+from inference_utils import normalize_team_names
+from pipeline import config
 
 logger = logging.getLogger(__name__)
 
-SEASON_URL_MAP = {
-    "2022/23": "https://www.football-data.co.uk/mmz4281/2223/E0.csv",
-    "2023/24": "https://www.football-data.co.uk/mmz4281/2324/E0.csv",
-    "2024/25": "https://www.football-data.co.uk/mmz4281/2425/E0.csv",
-    "2025/26": "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
-    "2026/27": "https://www.football-data.co.uk/mmz4281/2627/E0.csv",
-}
-
-COLS_NEEDED = [
-    "Date", "HomeTeam", "AwayTeam",
-    "FTHG", "FTAG", "FTR",
-    "HTHG", "HTAG", "HTR",
-    "HS", "AS", "HST", "AST",
-    "HF", "AF", "HC", "AC",
-    "HY", "AY", "HR", "AR",
-]
-
-try:
-    import certifi
-    CA_BUNDLE = certifi.where()
-except ImportError:
-    CA_BUNDLE = True
-
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+XG_CACHE = os.path.join(config.DATA_DIR, "xg_fotmob.csv")
+RESULT_COLS = ["Date", "HomeTeam", "AwayTeam", "FTHG", "FTAG", "FTR",
+               "HS", "AS", "HST", "AST", "HC", "AC", "HY", "AY", "HR", "AR"]
+MAX_MISSING_XG_SHARE = 0.02
 
 
-def _safe_get(url: str, headers: dict = None) -> requests.Response:
-    """Perform robust HTTP GET with SSL fallback."""
-    try:
-        return requests.get(url, timeout=12, headers=headers, verify=CA_BUNDLE)
-    except Exception:
-        return requests.get(url, timeout=12, headers=headers, verify=False)
-
-
-def fetch_football_data_raw() -> pd.DataFrame:
-    """Download and normalize match statistics from football-data.co.uk."""
-    dfs = []
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-
-    for season, url in SEASON_URL_MAP.items():
+def _get(url, params=None, retries=4, as_json=True):
+    last = None
+    for attempt in range(retries):
         try:
-            resp = _safe_get(url, headers=headers)
-            if resp.status_code == 200 and len(resp.text) > 100:
-                df = pd.read_csv(io.StringIO(resp.text), encoding="latin-1")
-                valid_cols = [c for c in COLS_NEEDED if c in df.columns]
-                df = df[valid_cols].copy()
-                df["Season"] = season
-                df["Date"] = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce")
-                df = df.dropna(subset=["Date", "HomeTeam", "AwayTeam", "FTR"])
-                df["HomeTeam"] = df["HomeTeam"].astype(str).str.strip().map(normalize_team)
-                df["AwayTeam"] = df["AwayTeam"].astype(str).str.strip().map(normalize_team)
-                dfs.append(df)
-                logger.info(f"Loaded {len(df)} matches for season {season}")
-            else:
-                logger.info(f"Season {season} not available or empty (HTTP {resp.status_code})")
-        except Exception as e:
-            logger.warning(f"Could not reach football-data for season {season}: {e}")
-
-    if not dfs:
-        return pd.DataFrame()
-
-    full_df = pd.concat(dfs, ignore_index=True)
-    full_df = full_df.sort_values("Date").reset_index(drop=True)
-    logger.info(f"Total live football-data records fetched: {len(full_df)}")
-    return full_df
+            r = requests.get(url, params=params, headers=config.HTTP_HEADERS, timeout=30)
+            if r.status_code == 200:
+                return r.json() if as_json else r.text
+            last = f"HTTP {r.status_code}"
+        except (requests.RequestException, ValueError) as e:
+            last = str(e)
+        time.sleep(1.5 * (attempt + 1))
+    raise RuntimeError(f"Request failed after {retries} attempts: {url} {params or ''} ({last})")
 
 
-def fetch_understat_xg_raw() -> pd.DataFrame:
-    """Download expected goals data from Understat for recent seasons."""
-    try:
-        from understatapi import UnderstatClient
-        LEAGUE = "EPL"
-        SEASONS = ["2022", "2023", "2024", "2025", "2026"]
-        cleaned_matches = []
+# ---------------------------------------------------------------- results
+def fetch_results(seasons_start_years) -> pd.DataFrame:
+    frames = []
+    for y in seasons_start_years:
+        season = config.season_label(y)
+        text = _get(config.football_data_url(y), as_json=False)
+        df = pd.read_csv(io.StringIO(text), encoding="latin-1")
+        if df.empty or "FTR" not in df.columns:
+            logger.info(f"{season}: no results published yet")
+            continue
+        df = df[[c for c in RESULT_COLS if c in df.columns]].dropna(subset=["Date", "HomeTeam", "AwayTeam", "FTR"])
+        df["Date"] = pd.to_datetime(df["Date"], dayfirst=True)
+        df["HomeTeam"] = normalize_team_names(df["HomeTeam"])
+        df["AwayTeam"] = normalize_team_names(df["AwayTeam"])
+        df["season"] = season
+        frames.append(df)
+        logger.info(f"{season}: {len(df)} results")
+    if not frames:
+        raise RuntimeError("No match results could be loaded from football-data.co.uk")
+    return pd.concat(frames, ignore_index=True)
 
-        with UnderstatClient() as understat:
-            for season in SEASONS:
+
+# ---------------------------------------------------------------- FotMob
+def _find_xg(node):
+    """Depth-first search for the first populated 'expected_goals' stat."""
+    if isinstance(node, dict):
+        if node.get("key") == "expected_goals":
+            raw = node.get("rawStats")
+            if isinstance(raw, list) and len(raw) == 2 and all(
+                    isinstance(v, dict) and v.get("value") is not None for v in raw):
+                return float(raw[0]["value"]), float(raw[1]["value"])
+        for v in node.values():
+            found = _find_xg(v)
+            if found:
+                return found
+    elif isinstance(node, list):
+        for v in node:
+            found = _find_xg(v)
+            if found:
+                return found
+    return None
+
+
+def fetch_fotmob_fixtures(seasons_start_years) -> pd.DataFrame:
+    """Every fixture (played and scheduled) FotMob lists for the given seasons."""
+    rows = []
+    for y in seasons_start_years:
+        data = _get("https://www.fotmob.com/api/data/leagues",
+                    {"id": config.FOTMOB_LEAGUE_ID, "season": config.fotmob_season(y)})
+        for m in data["fixtures"]["allMatches"]:
+            st = m["status"]
+            if st.get("cancelled"):
+                continue
+            hg = ag = np.nan
+            if st.get("finished") and st.get("scoreStr"):
                 try:
-                    fixtures = understat.league(league=LEAGUE).get_match_data(season=season)
-                    for match in fixtures:
-                        if not match.get("isResult"):
-                            continue
-                        match_info = {
-                            "season": f"{season}/{str(int(season)+1)[2:]}",
-                            "date": pd.to_datetime(match["datetime"]).date(),
-                            "home_team": normalize_understat(match["h"]["title"]),
-                            "away_team": normalize_understat(match["a"]["title"]),
-                            "home_xG": float(match["xG"]["h"]),
-                            "away_xG": float(match["xG"]["a"]),
-                        }
-                        cleaned_matches.append(match_info)
-                    logger.info(f"Loaded Understat xG for season {season}")
-                except Exception as e:
-                    logger.warning(f"Could not load Understat season {season}: {e}")
-
-        if not cleaned_matches:
-            return pd.DataFrame()
-
-        df_xg = pd.DataFrame(cleaned_matches)
-        return df_xg
-    except Exception as e:
-        logger.warning(f"Understat API fetch skipped: {e}")
-        return pd.DataFrame()
+                    hg, ag = (int(x) for x in st["scoreStr"].replace(" ", "").split("-"))
+                except ValueError:
+                    pass
+            rows.append({"fotmob_id": int(m["id"]), "season": config.season_label(y),
+                         "round": m.get("round"), "kickoff_utc": st["utcTime"],
+                         "home_team_fotmob": m["home"]["name"], "away_team_fotmob": m["away"]["name"],
+                         "finished": bool(st.get("finished")), "fotmob_home_goals": hg,
+                         "fotmob_away_goals": ag})
+    fx = pd.DataFrame(rows)
+    fx["HomeTeam"] = normalize_team_names(fx["home_team_fotmob"])
+    fx["AwayTeam"] = normalize_team_names(fx["away_team_fotmob"])
+    fx["kickoff_utc"] = pd.to_datetime(fx["kickoff_utc"], utc=True)
+    # A fixture can be listed twice (e.g. a postponed match); keep the latest entry
+    fx = fx.sort_values("kickoff_utc").drop_duplicates(["season", "HomeTeam", "AwayTeam"], keep="last")
+    return fx.reset_index(drop=True)
 
 
-def load_cached_baseline_data() -> pd.DataFrame:
-    """Load baseline match dataset from existing assets package when offline."""
-    assets_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "epl_predictor_assets.pkl")
-    if not os.path.exists(assets_path):
-        return pd.DataFrame()
+def update_xg_cache(fixtures: pd.DataFrame) -> pd.DataFrame:
+    """Fetch match xG for finished fixtures missing from the cache; return the cache."""
+    cache = pd.read_csv(XG_CACHE) if os.path.exists(XG_CACHE) else pd.DataFrame(
+        columns=["fotmob_id", "home_xG", "away_xG"])
+    have = set(cache["fotmob_id"].astype(int)) if len(cache) else set()
+    todo = fixtures[fixtures["finished"] & ~fixtures["fotmob_id"].isin(have)]["fotmob_id"].tolist()
+    if todo:
+        logger.info(f"Fetching xG for {len(todo)} new matches from FotMob")
 
-    try:
-        with open(assets_path, "rb") as f:
-            assets = pickle.load(f)
+        def one(mid):
+            d = _get("https://www.fotmob.com/api/data/matchDetails", {"matchId": mid})
+            xg = _find_xg(d.get("content", {}).get("stats", {}))
+            return {"fotmob_id": mid, "home_xG": xg[0] if xg else np.nan, "away_xG": xg[1] if xg else np.nan}
 
-        df_p = assets.get("df_poisson")
-        team_map = assets.get("team_map", {})
-        inv_team_map = {v: k for k, v in team_map.items()}
-
-        if df_p is not None and not df_p.empty:
-            df = df_p.copy()
-            # If teams are integer-encoded, recover string names
-            if pd.api.types.is_numeric_dtype(df["HomeTeam"]):
-                df["HomeTeam"] = df["HomeTeam"].map(inv_team_map).fillna(df["HomeTeam"].astype(str))
-            if pd.api.types.is_numeric_dtype(df["AwayTeam"]):
-                df["AwayTeam"] = df["AwayTeam"].map(inv_team_map).fillna(df["AwayTeam"].astype(str))
-
-            # Decode FTR numeric labels if present
-            ftr_inv = {0: "D", 1: "A", 2: "H"}
-            if pd.api.types.is_numeric_dtype(df["FTR"]):
-                df["FTR"] = df["FTR"].map(ftr_inv).fillna("D")
-
-            df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-            df["Season"] = df["season"] if "season" in df.columns else "2022/23"
-            logger.info(f"Successfully loaded {len(df)} cached historical matches from assets.")
-            return df
-    except Exception as e:
-        logger.warning(f"Failed to load cached baseline data: {e}")
-
-    return pd.DataFrame()
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            new = pd.DataFrame(list(pool.map(one, todo)))
+        # Don't cache "no xG yet" (FotMob can publish stats a little after full time)
+        new = new.dropna(subset=["home_xG", "away_xG"])
+        cache = pd.concat([cache, new], ignore_index=True)
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        cache.sort_values("fotmob_id").to_csv(XG_CACHE, index=False)
+    return cache
 
 
-def load_and_merge_pipeline_data() -> pd.DataFrame:
-    """Merge football-data match records with Understat xG records with fallback."""
-    df_stats = fetch_football_data_raw()
-    df_xg = fetch_understat_xg_raw()
+# ---------------------------------------------------------------- merge
+def load_match_data(today=None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Returns (played matches with xG, all FotMob fixtures)."""
+    years = list(range(config.FIRST_SEASON_START, config.current_season_start(today) + 1))
+    results = fetch_results(years)
+    fixtures = fetch_fotmob_fixtures(years)
 
-    # If live scraping failed, use cached historical baseline
-    if df_stats.empty:
-        logger.info("Live data fetching unreachable. Loading cached historical dataset.")
-        df_stats = load_cached_baseline_data()
-        if df_stats.empty:
-            raise RuntimeError("Fatal: Match dataset is empty. Cannot continue pipeline.")
-        return df_stats
+    unknown = (set(fixtures["HomeTeam"]) | set(fixtures["AwayTeam"])) - (set(results["HomeTeam"]) | set(results["AwayTeam"]))
+    current = config.season_label(years[-1])
+    unknown_played = unknown & set(fixtures.loc[fixtures["finished"] & (fixtures["season"] != current), "HomeTeam"])
+    if unknown_played:
+        raise RuntimeError(f"FotMob team names with no football-data match (add to TEAM_NAME_ALIASES): {sorted(unknown_played)}")
 
-    # Merge live data with xG
-    default_home_xg = 1.69
-    default_away_xg = 1.32
-    if not df_xg.empty:
-        default_home_xg = float(df_xg["home_xG"].mean())
-        default_away_xg = float(df_xg["away_xG"].mean())
-        df_stats["_date_key"] = df_stats["Date"].dt.date.astype(str)
-        df_stats["_home_key"] = df_stats["HomeTeam"].str.lower().str.strip()
-        df_stats["_away_key"] = df_stats["AwayTeam"].str.lower().str.strip()
+    xg = update_xg_cache(fixtures)
+    fx = fixtures.merge(xg, on="fotmob_id", how="left")
+    df = results.merge(fx[["season", "HomeTeam", "AwayTeam", "fotmob_id", "home_xG", "away_xG"]],
+                       on=["season", "HomeTeam", "AwayTeam"], how="left", validate="one_to_one")
 
-        df_xg["_date_key"] = pd.to_datetime(df_xg["date"]).dt.date.astype(str)
-        df_xg["_home_key"] = df_xg["home_team"].str.lower().str.strip()
-        df_xg["_away_key"] = df_xg["away_team"].str.lower().str.strip()
+    missing = df["home_xG"].isna() | df["away_xG"].isna()
+    if missing.mean() > MAX_MISSING_XG_SHARE:
+        raise RuntimeError(f"{missing.sum()} of {len(df)} matches have no xG; refusing to train on a proxy. "
+                           f"Examples:\n{df.loc[missing, ['Date', 'HomeTeam', 'AwayTeam']].head(10)}")
+    if missing.any():
+        # A handful of very recent matches can lack published xG; goals are the stand-in
+        logger.warning(f"{missing.sum()} matches without xG; using goals as their xG")
+        df.loc[missing, "home_xG"] = df.loc[missing, "FTHG"].astype(float)
+        df.loc[missing, "away_xG"] = df.loc[missing, "FTAG"].astype(float)
+    df["xg_is_proxy"] = missing
 
-        merged = pd.merge(
-            df_stats,
-            df_xg[["_date_key", "_home_key", "_away_key", "home_xG", "away_xG"]],
-            on=["_date_key", "_home_key", "_away_key"],
-            how="left",
-        )
-        merged = merged.drop(columns=["_date_key", "_home_key", "_away_key"])
-    else:
-        merged = df_stats.copy()
-        if "home_xG" not in merged.columns:
-            merged["home_xG"] = np.nan
-        if "away_xG" not in merged.columns:
-            merged["away_xG"] = np.nan
-
-    if "HST" in merged.columns and "AST" in merged.columns:
-        merged["home_xG"] = merged["home_xG"].fillna(
-            (merged["FTHG"] * 0.5 + merged["HST"] * 0.15).clip(lower=0.2, upper=5.0)
-        )
-        merged["away_xG"] = merged["away_xG"].fillna(
-            (merged["FTAG"] * 0.5 + merged["AST"] * 0.15).clip(lower=0.2, upper=5.0)
-        )
-    else:
-        merged["home_xG"] = merged["home_xG"].fillna(default_home_xg)
-        merged["away_xG"] = merged["away_xG"].fillna(default_away_xg)
-
-    merged["season"] = merged["Season"]
-    merged = merged.sort_values("Date").reset_index(drop=True)
-    logger.info(f"Merged dataset ready: {len(merged)} matches with xG.")
-    return merged
+    df["FTR"] = df["FTR"].map({"H": 2, "A": 1, "D": 0})
+    if df["FTR"].isna().any():
+        raise RuntimeError("Unexpected FTR values in results")
+    df["FTR"] = df["FTR"].astype(int)
+    df = df.sort_values("Date", kind="stable").reset_index(drop=True)
+    logger.info(f"Loaded {len(df)} played matches ({df['season'].nunique()} seasons) with xG")
+    return df, fixtures

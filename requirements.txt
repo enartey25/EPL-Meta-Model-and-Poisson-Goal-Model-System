@@ -1,9 +1,9 @@
-streamlit>=1.35.0
-pandas>=2.0.0
-numpy>=1.24.0
-scipy>=1.10.0
-plotly>=5.18.0
-requests>=2.28.0
-scikit-learn>=1.3.0
-xgboost>=1.7.0
-understatapi==0.7.1
+streamlit>=1.40
+pandas>=2.2
+numpy>=1.26
+scipy>=1.11
+plotly>=5.24
+requests>=2.31
+# Pinned: the pickled models are built by the pipeline (GitHub Actions) and loaded
+# by the app, so both must use the same scikit-learn version.
+scikit-learn==1.7.2

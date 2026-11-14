@@ -1,111 +1,122 @@
-"""
-Model training and stacking module for the EPL Match Predictor pipeline.
-Trains XGBoost, Random Forest, and the Level-1 Logistic Regression Stacking Meta-Learner.
+"""Model training, evaluation and the walk-forward track record.
+
+The stack: a Random Forest on the engineered features and the opponent-adjusted
+Poisson model's outcome probabilities, combined by a multinomial logistic
+regression meta-learner. The meta-learner is always trained on out-of-sample
+inputs: for each season, a Random Forest trained only on earlier seasons.
 """
 import logging
+
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
-from sklearn.model_selection import StratifiedKFold
-from xgboost import XGBClassifier
 
-from pipeline.build_features import FINAL_FEATURES
+from inference_utils import meta_features
+from pipeline import config
+from pipeline.update_poisson import poisson_probs
 
 logger = logging.getLogger(__name__)
+LABELS = [0, 1, 2]  # Draw, AwayWin, HomeWin
 
 
-def multiclass_brier_score(y_true, y_prob):
-    """Compute multiclass Brier score."""
-    y_true = np.asarray(y_true)
-    y_prob = np.asarray(y_prob)
-    n_samples, n_classes = y_prob.shape
-    y_true_one_hot = np.zeros((n_samples, n_classes))
-    for i, label in enumerate(y_true):
-        y_true_one_hot[i, int(label)] = 1.0
-    return float(np.mean(np.sum((y_prob - y_true_one_hot) ** 2, axis=1)))
+def scores(y, p) -> dict:
+    y = np.asarray(y)
+    onehot = np.column_stack([(y == c).astype(int) for c in LABELS])
+    return {"log_loss": float(log_loss(y, p, labels=LABELS)),
+            "brier": float(np.mean(np.sum((np.asarray(p) - onehot) ** 2, axis=1))),
+            "n": int(len(y))}
 
 
-def get_base_models():
-    """Instantiate calibrated, regularized base models."""
-    xgb_model = XGBClassifier(
-        n_estimators=541,
-        max_depth=3,
-        learning_rate=0.0297,
-        subsample=0.985,
-        colsample_bytree=0.729,
-        gamma=0.259,
-        reg_alpha=4.544,
-        reg_lambda=5.047,
-        eval_metric="logloss",
-        random_state=42,
-    )
-
-    rf_model = RandomForestClassifier(
-        n_estimators=443,
-        max_depth=3,
-        min_samples_split=10,
-        min_samples_leaf=7,
-        class_weight={0: 1.4, 1: 1.0, 2: 1.0},
-        random_state=42,
-        n_jobs=-1,
-    )
-
-    return xgb_model, rf_model
+def make_rf():
+    return RandomForestClassifier(**config.RF_PARAMS)
 
 
-def train_stacking_pipeline(df: pd.DataFrame) -> dict:
-    """Train XGBoost, Random Forest, and Level-1 Stacking Logistic Regression Meta-Learner."""
-    valid_mask = df["FTR_label"].notna()
-    df_valid = df[valid_mask].copy()
+def make_meta():
+    return LogisticRegression(max_iter=1000)
 
-    X = df_valid[FINAL_FEATURES]
-    y = df_valid["FTR_label"].astype(int).values
 
-    logger.info(f"Training pipeline with {len(X)} fixtures and {X.shape[1]} features.")
+def class_prior(y) -> np.ndarray:
+    return np.bincount(np.asarray(y, dtype=int), minlength=3) / len(y)
 
-    # 1. Out-of-fold probability generation for the meta-learner
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    oof_xgb = np.zeros((len(X), 3))
-    oof_rf = np.zeros((len(X), 3))
 
-    for train_idx, val_idx in skf.split(X, y):
-        X_tr, y_tr = X.iloc[train_idx], y[train_idx]
-        X_va = X.iloc[val_idx]
+def _parts(rf, rows: pd.DataFrame, dfp: pd.DataFrame) -> dict:
+    return {"rf": rf.predict_proba(rows[config.FINAL_FEATURES]),
+            "poisson": poisson_probs(dfp.loc[rows.index, "Lambda_Home"], dfp.loc[rows.index, "Lambda_Away"])}
 
-        m_xgb, m_rf = get_base_models()
-        m_xgb.fit(X_tr, y_tr)
-        m_rf.fit(X_tr, y_tr)
 
-        oof_xgb[val_idx] = m_xgb.predict_proba(X_va)
-        oof_rf[val_idx] = m_rf.predict_proba(X_va)
+def _meta_X(parts: dict) -> np.ndarray:
+    return meta_features([parts[k] for k in config.META_INPUTS], config.META_TRANSFORM)
 
-    # 2. Fit Level-1 Stacking Meta-Learner on OOF probabilities
-    X_meta = np.hstack([oof_xgb, oof_rf])
-    meta_model = LogisticRegression(
-        max_iter=1000,
-        class_weight={0: 1.4, 1: 1.0, 2: 1.0},
-        solver="lbfgs",
-        random_state=42,
-    )
-    meta_model.fit(X_meta, y)
 
-    # 3. Fit base models on the entire dataset
-    best_xgb_model, best_rf_model = get_base_models()
-    best_xgb_model.fit(X, y)
-    best_rf_model.fit(X, y)
+def fit_stack(df: pd.DataFrame, dfp: pd.DataFrame, seasons: list[str]):
+    """Fit the stack using only ``seasons`` (in chronological order).
 
-    # 4. In-sample / OOF evaluation metrics
-    oof_meta_probs = meta_model.predict_proba(X_meta)
-    brier = multiclass_brier_score(y, oof_meta_probs)
-    ll = float(log_loss(y, oof_meta_probs))
+    The meta-learner sees walk-forward out-of-sample Random Forest probabilities
+    for every season that has at least MIN_PRIOR_SEASONS_FOR_META earlier ones."""
+    X_parts, y_parts = [], []
+    for i, s in enumerate(seasons):
+        if i < config.MIN_PRIOR_SEASONS_FOR_META:
+            continue
+        past = df[df["season"].isin(seasons[:i])]
+        cur = df[df["season"] == s]
+        rf_wf = make_rf().fit(past[config.FINAL_FEATURES], past["FTR"])
+        X_parts.append(_meta_X(_parts(rf_wf, cur, dfp)))
+        y_parts.append(cur["FTR"].to_numpy())
+    if not X_parts:
+        raise ValueError(f"Need more than {config.MIN_PRIOR_SEASONS_FOR_META} seasons to train the meta-learner")
+    meta = make_meta().fit(np.vstack(X_parts), np.concatenate(y_parts))
+    used = df[df["season"].isin(seasons)]
+    rf = make_rf().fit(used[config.FINAL_FEATURES], used["FTR"])
+    return rf, meta, int(sum(len(y) for y in y_parts))
 
-    logger.info(f"Stacking Meta-Model OOF Log Loss: {ll:.4f} | Brier Score: {brier:.4f}")
 
-    return {
-        "best_xgb_model": best_xgb_model,
-        "best_rf_model": best_rf_model,
-        "stacked_meta_model": meta_model,
-        "metrics": {"log_loss": ll, "brier_score": brier, "n_samples": len(X)},
+def predict_rows(rf, meta, rows: pd.DataFrame, dfp: pd.DataFrame) -> np.ndarray:
+    return meta.predict_proba(_meta_X(_parts(rf, rows, dfp)))
+
+
+def holdout_evaluation(df: pd.DataFrame, dfp: pd.DataFrame, complete_seasons: list[str]) -> dict:
+    """The notebook protocol on the latest complete season: Random Forest trained on
+    the seasons before validation, meta-learner trained on the validation season,
+    test season scored once."""
+    if len(complete_seasons) < 3:
+        return {}
+    test_s, val_s, train_s = complete_seasons[-1], complete_seasons[-2], complete_seasons[:-2]
+    tr, va, te = (df[df["season"].isin(train_s)], df[df["season"] == val_s], df[df["season"] == test_s])
+    rf = make_rf().fit(tr[config.FINAL_FEATURES], tr["FTR"])
+    meta = make_meta().fit(_meta_X(_parts(rf, va, dfp)), va["FTR"])
+    parts_te = _parts(rf, te, dfp)
+    stack = meta.predict_proba(_meta_X(parts_te))
+    prior = class_prior(tr["FTR"])
+    out = {
+        "train_seasons": train_s, "validation_season": val_s, "test_season": test_s,
+        "null_baseline": scores(te["FTR"], np.tile(prior, (len(te), 1))),
+        "random_forest": scores(te["FTR"], parts_te["rf"]),
+        "poisson": scores(te["FTR"], parts_te["poisson"]),
+        "stack": scores(te["FTR"], stack),
     }
+    logger.info(f"Holdout {test_s}: stack log loss {out['stack']['log_loss']:.4f} "
+                f"vs null {out['null_baseline']['log_loss']:.4f}")
+    return out
+
+
+def season_record(df: pd.DataFrame, dfp: pd.DataFrame, season: str, seasons: list[str]) -> pd.DataFrame:
+    """Forecasts for every played match of ``season`` from a stack frozen at that
+    season's start (trained only on earlier seasons). Features and Poisson rates
+    are pre-match, so each forecast uses only information available before kickoff."""
+    prior_seasons = seasons[:seasons.index(season)]
+    rf, meta, _ = fit_stack(df, dfp, prior_seasons)
+    rows = df[df["season"] == season]
+    p = predict_rows(rf, meta, rows, dfp)
+    prior = class_prior(df[df["season"].isin(prior_seasons)]["FTR"])
+    rec = pd.DataFrame({
+        "season": season, "Date": rows["Date"].values,
+        "HomeTeam": rows["HomeTeam_name"].values, "AwayTeam": rows["AwayTeam_name"].values,
+        "FTHG": rows["FTHG"].values, "FTAG": rows["FTAG"].values, "FTR": rows["FTR"].values,
+        "P_Draw": p[:, 0], "P_Away": p[:, 1], "P_Home": p[:, 2],
+        "Null_Draw": prior[0], "Null_Away": prior[1], "Null_Home": prior[2],
+        "source": "walk-forward",
+    })
+    return rec
