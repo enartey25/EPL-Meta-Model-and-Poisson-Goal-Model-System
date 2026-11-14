@@ -12,7 +12,7 @@ NAVY, NAVY_DEEP, NAVY_RAISED = "#0D1B3D", "#08122B", "#14244A"
 STOCK, STOCK_WHITE, INK = "#F2F0EA", "#FFFFFF", "#0D1B3D"
 RED, RED_HEAD = "#D7262D", "#C41E26"
 CARBON, CARBON_COPY, CARBON_ON_NAVY = "#4B2E83", "#DCD3F0", "#C3B4EE"
-MUTED_ON_NAVY = "#B9BDC9"
+MUTED_ON_NAVY = "#AEB9D6"
 RULE_ON_NAVY = "rgba(242,240,234,0.22)"
 
 CLUB_CODES = {
@@ -35,6 +35,9 @@ def esc(s) -> str:
     return html.escape(str(s))
 
 
+TITLE_HAPPENED = ' title="What happened"'
+
+
 def pct(p: float) -> str:
     return f"{p * 100:.0f}"
 
@@ -52,7 +55,8 @@ CSS = f"""
   --body:'Barlow', system-ui, sans-serif;
   --num:'IBM Plex Mono', ui-monospace, monospace;
 }}
-html, body, .stApp, [class*="st-"] {{ font-family: var(--body); }}
+html, body, .stApp, [class*="st-"]:not([data-testid="stIconMaterial"]):not(.material-symbols-rounded) {{ font-family: var(--body); }}
+[data-testid="stIconMaterial"], .material-symbols-rounded {{ font-family:"Material Symbols Rounded" !important; }}
 .stApp {{ background: var(--navy); color: var(--stock); }}
 header[data-testid="stHeader"] {{ display: none; }}
 [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] {{ display: none; }}
@@ -65,23 +69,22 @@ a {{ color: var(--stock); text-underline-offset: 3px; }}
 p, li {{ max-width: 72ch; line-height: 1.6; }}
 
 /* ---------- top bar ---------- */
-.bar {{ display:flex; align-items:center; gap:28px; height:60px; margin:0 -40px 0; padding:0 40px;
+.bar {{ display:flex; align-items:center; gap:28px; height:52px; margin:0 -40px 0; padding:0 40px;
         background:var(--navy-deep); }}
 .wordmark {{ font-family:var(--display); font-weight:800; font-size:24px; letter-spacing:.1em;
              text-transform:uppercase; color:var(--stock); white-space:nowrap; }}
 .wordmark b {{ color:var(--red); }}
 .notbet {{ margin-left:auto; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
            border:1px solid var(--rule); padding:6px 10px; white-space:nowrap; }}
-div[data-testid="stHorizontalBlock"]:has(a[data-testid="stPageLink-NavLink"]) {{
-   margin:0 -40px 8px; padding:0 34px; background:var(--navy-deep); border-bottom:1px solid var(--rule);
-   gap:2px; flex-wrap:wrap; }}
-div[data-testid="stHorizontalBlock"]:has(a[data-testid="stPageLink-NavLink"]) > div {{ flex:0 0 auto !important; width:auto !important; min-width:0 !important; }}
-a[data-testid="stPageLink-NavLink"] {{ background:transparent !important; padding:8px 12px; }}
-a[data-testid="stPageLink-NavLink"] p {{ font-family:var(--display); font-size:15px; font-weight:600;
-   letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }}
+[data-testid="stElementContainer"]:has(.bar) {{ margin-bottom:-1rem; }}
+.st-key-topnav {{ margin:0 -40px 8px; padding:0 34px; background:var(--navy-deep); border-bottom:1px solid var(--rule);
+   gap:0 8px !important; flex-wrap:wrap !important; flex-direction:row !important; align-items:stretch !important; }}
+.st-key-topnav > div {{ flex:0 0 auto !important; width:auto !important; min-width:0 !important; }}
+a[data-testid="stPageLink-NavLink"] {{ display:flex !important; align-items:center; height:40px; padding:0 10px !important;
+   margin:0 !important; background:transparent !important; text-decoration:none !important; }}
+a[data-testid="stPageLink-NavLink"] p {{ margin:0 !important; font-family:var(--display); font-size:15px; font-weight:600;
+   letter-spacing:.12em; text-transform:uppercase; color:var(--muted); white-space:nowrap; }}
 a[data-testid="stPageLink-NavLink"]:hover p {{ color:var(--stock); }}
-a[data-testid="stPageLink-NavLink"][aria-current="page"] {{ box-shadow: inset 0 -2px 0 var(--red); }}
-a[data-testid="stPageLink-NavLink"][aria-current="page"] p {{ color:var(--stock); }}
 
 /* ---------- headings ---------- */
 h1.pg {{ font-family:var(--display); font-weight:800; font-size:48px; line-height:1; letter-spacing:.02em;
@@ -93,15 +96,17 @@ h2.sec {{ font-family:var(--display); font-weight:700; font-size:24px; letter-sp
 .prose b {{ color:var(--stock); font-weight:600; }}
 
 /* ---------- coupons ---------- */
-.wallet {{ display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:18px; }}
-.cp {{ background:var(--stock); color:var(--ink); display:grid; grid-template-columns:1fr 96px;
+.wallet {{ display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:18px; }}
+.cp {{ background:var(--stock); color:var(--ink); display:grid; grid-template-columns:1fr 108px;
        grid-template-rows:34px 1fr; min-height:212px; }}
 .cp-hd {{ grid-column:1/-1; background:var(--red-head); color:var(--stock); display:flex; justify-content:space-between;
-          align-items:center; padding:0 14px; font-family:var(--display); font-weight:700; font-size:14px;
+          align-items:center; padding:6px 14px; font-family:var(--display); font-weight:700; font-size:14px;
           letter-spacing:.12em; text-transform:uppercase; }}
 .cp-hd span:last-child {{ font-family:var(--num); font-weight:500; font-size:12px; letter-spacing:.04em; }}
 .cp-bd {{ padding:14px 14px 12px; display:flex; flex-direction:column; justify-content:space-between; gap:12px; position:relative; }}
 .cp-teams {{ font-family:var(--display); font-weight:800; font-size:24px; line-height:1.08; text-transform:uppercase; }}
+.wallet > .cp {{ container-type:inline-size; }}
+@container (max-width: 320px) {{ .cp-teams {{ font-size:20px; }} }}
 .cp-teams small {{ display:block; font-family:var(--body); font-weight:500; font-size:13px; text-transform:none;
                    letter-spacing:0; color:#3c4660; margin-top:2px; }}
 .fields {{ display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }}
@@ -111,28 +116,42 @@ h2.sec {{ font-family:var(--display); font-weight:700; font-size:24px; letter-sp
          font-variant-numeric:tabular-nums; line-height:1.15; }}
 .fd.fav b {{ font-weight:600; }}
 .fd.fav {{ color:var(--ink); }}
-.fd.actual {{ outline:1px solid var(--ink); outline-offset:3px; }}
-.stub {{ border-left:1px dashed rgba(13,27,61,.45); display:flex; flex-direction:column; align-items:center;
+.fd.actual {{ border:1px solid var(--ink); padding:3px 6px 4px; }}
+.stub {{ position:relative; border-left:1px dashed rgba(13,27,61,.45); display:flex; flex-direction:column; align-items:center;
          justify-content:center; gap:2px; font-family:var(--display); font-weight:600; font-size:12px;
          letter-spacing:.12em; text-transform:uppercase; color:#3c4660; text-align:center; padding:8px; }}
 .stub b {{ font-family:var(--num); font-weight:600; font-size:26px; letter-spacing:0; color:var(--carbon); }}
+.stub.stamped {{ padding-top:60px; }}
+.stub::before, .stub::after {{ content:""; position:absolute; left:-6px; width:11px; height:11px; background:var(--navy);
+   transform:rotate(45deg); }}
+.stub::before {{ top:-6px; }} .stub::after {{ bottom:-6px; }}
 .stub i {{ font-style:normal; font-family:var(--num); font-size:12px; letter-spacing:0; }}
-.stamp {{ position:absolute; right:10px; top:12px; transform:rotate(-9deg); font-family:var(--display); font-weight:800;
-          font-size:20px; letter-spacing:.16em; padding:2px 10px; text-transform:uppercase;
+.stamp {{ position:absolute; left:50%; top:14px; transform:translateX(-50%) rotate(-9deg); font-family:var(--display);
+          font-weight:800; font-size:24px; letter-spacing:.12em; padding:1px 8px; text-transform:uppercase; white-space:nowrap;
           animation: press .5s cubic-bezier(.16,1,.3,1) both; }}
-.stamp.hit {{ color:var(--ink); border:2px solid var(--ink); }}
-.stamp.miss {{ color:var(--red); border:2px dashed var(--red); text-decoration:line-through; text-decoration-thickness:2px; }}
-@keyframes press {{ from {{ transform:rotate(-9deg) scale(1.35); opacity:0; }} to {{ transform:rotate(-9deg) scale(1); opacity:1; }} }}
+.stamp.hit {{ color:var(--ink); border:3px solid var(--ink); }}
+.stamp.miss {{ color:var(--red-head); border:2px dashed var(--red-head); text-decoration:line-through; text-decoration-thickness:2px; }}
+@keyframes press {{ from {{ transform:translateX(-50%) rotate(-9deg) scale(1.35); opacity:0; }}
+                    to {{ transform:translateX(-50%) rotate(-9deg) scale(1); opacity:1; }} }}
 @media (prefers-reduced-motion: reduce) {{ .stamp, .issue {{ animation:none !important; }} }}
 
 /* ---------- ledger (ruled fare boxes on navy) ---------- */
-.ledger {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); border:1px solid var(--rule); }}
-.lg {{ padding:12px 14px; border-right:1px solid var(--rule); }}
-.lg:last-child {{ border-right:0; }}
+.ledger {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); border:1px solid var(--rule); overflow:hidden; }}
+.lg {{ padding:12px 14px; box-shadow:1px 0 0 var(--rule), 0 1px 0 var(--rule); }}
 .lg .l {{ font-family:var(--display); font-weight:600; font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }}
 .lg .v {{ font-family:var(--num); font-size:28px; color:var(--stock); font-variant-numeric:tabular-nums; margin-top:4px; }}
 .lg .n {{ font-size:13px; color:var(--muted); margin-top:2px; }}
 .lg .v.good {{ color:var(--carbon-navy); }}
+.slip {{ background:var(--carbon-copy); color:var(--carbon); }}
+.slip-hd {{ background:var(--carbon); color:var(--stock); padding:9px 14px; font-family:var(--display); font-weight:700;
+   font-size:14px; letter-spacing:.12em; text-transform:uppercase; }}
+.slip .ledger {{ grid-template-columns:1fr; border:0; border-top:1px dashed rgba(75,46,131,.55); }}
+.slip .lg {{ box-shadow:0 1px 0 rgba(75,46,131,.28); }}
+.slip .lg:last-child {{ box-shadow:none; }}
+.slip .lg .l {{ color:var(--carbon); }}
+.slip .lg .v {{ color:var(--carbon); font-size:32px; }}
+.slip .lg .v.good {{ color:var(--carbon); font-weight:600; }}
+.slip .lg .n {{ color:#4A3D6B; }}
 
 /* ---------- issued forecast (predictor) ---------- */
 .issue {{ background:var(--stock); color:var(--ink); margin-top:8px; animation: print .7s cubic-bezier(.16,1,.3,1) both; }}
@@ -172,8 +191,11 @@ table.rt tr:hover td {{ background:var(--navy-raised); }}
 .stButton > button, .stFormSubmitButton > button {{ background:var(--red); color:var(--stock); border:1px solid var(--red);
    font-family:var(--display); font-weight:700; font-size:16px; letter-spacing:.16em; text-transform:uppercase;
    padding:10px 28px; min-height:48px; }}
-.stButton > button:hover {{ background:#B81E25; border-color:#B81E25; color:var(--stock); }}
-.stButton > button:active {{ background:#9E1A20; }}
+.stButton > button:hover, .stFormSubmitButton > button:hover,
+.stButton > button:focus:not(:active), .stFormSubmitButton > button:focus:not(:active) {{
+   background:#B81E25 !important; border-color:#B81E25 !important; color:var(--stock) !important; }}
+.stButton > button:active, .stFormSubmitButton > button:active {{ background:#9E1A20 !important; color:var(--stock) !important; }}
+.stButton > button p, .stFormSubmitButton > button p {{ font:inherit; letter-spacing:inherit; }}
 [data-baseweb="select"] > div {{ background:var(--navy-raised) !important; border:1px solid var(--rule) !important; }}
 [data-testid="stWidgetLabel"] p {{ font-family:var(--display); font-weight:600; font-size:13px !important;
    letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }}
@@ -187,9 +209,9 @@ table.rt tr:hover td {{ background:var(--navy-raised); }}
 
 @media (max-width: 760px) {{
   .block-container {{ padding:0 16px 48px; }}
-  .bar {{ margin:0 -16px; padding:0 16px; height:56px; }}
-  .notbet {{ display:none; }}
-  div[data-testid="stHorizontalBlock"]:has(a[data-testid="stPageLink-NavLink"]) {{ margin:0 -16px 8px; padding:0 10px; }}
+  .bar {{ margin:0 -16px; padding:12px 16px; height:auto; flex-wrap:wrap; gap:8px 16px; }}
+  .notbet {{ margin-left:0; padding:4px 8px; }}
+  .st-key-topnav {{ margin:0 -16px 8px; padding:0 10px; }}
   h1.pg {{ font-size:36px; margin-top:20px; }}
   .wallet {{ grid-template-columns:1fr; }}
   .route {{ padding:14px; }} .is-fields {{ grid-template-columns:repeat(2, 1fr); }}
@@ -209,15 +231,16 @@ def coupon(home, away, p_home, p_draw, p_away, head_left, head_right, stub_label
     probs = {"H": p_home, "D": p_draw, "A": p_away}
     fav = max(probs, key=probs.get)
     fields = "".join(
-        f'<div class="fd{" fav" if k == fav else ""}{" actual" if k == actual else ""}">{lbl}<b>{pct(probs[k])}</b></div>'
+        f'<div class="fd{" fav" if k == fav else ""}{" actual" if k == actual else ""}"'
+        f'{TITLE_HAPPENED if k == actual else ""}>{lbl}<b>{pct(probs[k])}</b></div>'
         for k, lbl in (("H", "Home"), ("D", "Draw"), ("A", "Away")))
     stamp_html = f'<div class="stamp {stamp}">{"Hit" if stamp == "hit" else "Miss"}</div>' if stamp else ""
     sub_html = f"<small>{esc(sub)}</small>" if sub else ""
     return (f'<div class="cp" role="group" aria-label="{esc(home)} v {esc(away)}">'
             f'<div class="cp-hd"><span>{esc(head_left)}</span><span>{esc(head_right)}</span></div>'
-            f'<div class="cp-bd">{stamp_html}<div class="cp-teams">{esc(home)}<br>v {esc(away)}{sub_html}</div>'
+            f'<div class="cp-bd"><div class="cp-teams">{esc(home)}<br>v {esc(away)}{sub_html}</div>'
             f'<div class="fields">{fields}</div></div>'
-            f'<div class="stub">{esc(stub_label)}<b>{esc(stub_value)}</b><i>{esc(stub_sub)}</i></div></div>')
+            f'<div class="stub{" stamped" if stamp else ""}">{stamp_html}{esc(stub_label)}<b>{esc(stub_value)}</b><i>{esc(stub_sub)}</i></div></div>')
 
 
 def ledger(items) -> str:
@@ -225,6 +248,23 @@ def ledger(items) -> str:
     cells = "".join(f'<div class="lg"><div class="l">{esc(l)}</div><div class="v{" good" if g else ""}">{esc(v)}</div>'
                     f'<div class="n">{esc(n)}</div></div>' for l, v, n, g in items)
     return f'<div class="ledger">{cells}</div>'
+
+
+def slip(title, items) -> str:
+    """The season ledger as a carbon-copy slip: derived figures on lilac, under a carbon head."""
+    return (f'<div class="slip" role="group" aria-label="{esc(title)}">'
+            f'<div class="slip-hd">{esc(title)}</div>{ledger(items)}</div>')
+
+
+def nav_bar(pages, current):
+    """The page links as one band under the top bar; the current page is underlined in jet red."""
+    with st.container(horizontal=True, key="topnav", gap=None):
+        for page in pages:
+            with st.container(key=f"nav-{page.url_path}", width="content"):
+                st.page_link(page, label=page.title)
+    st.markdown(f'<style>.st-key-nav-{current} a[data-testid="stPageLink-NavLink"] {{ box-shadow: inset 0 -2px 0 {RED}; }}'
+                f'.st-key-nav-{current} a[data-testid="stPageLink-NavLink"] p {{ color:{STOCK}; }}</style>',
+                unsafe_allow_html=True)
 
 
 def top_bar():

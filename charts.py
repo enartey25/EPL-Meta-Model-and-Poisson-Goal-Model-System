@@ -7,6 +7,7 @@ from ui import CARBON, CARBON_COPY, CARBON_ON_NAVY, INK, MUTED_ON_NAVY, NAVY, RE
 
 GRID = "rgba(242,240,234,0.14)"
 FONT = "Barlow, system-ui, sans-serif"
+DISPLAY = "Barlow Condensed, Arial Narrow, sans-serif"
 NUM = "IBM Plex Mono, ui-monospace, monospace"
 
 
@@ -14,7 +15,7 @@ def _layout(fig, title=None, height=360, legend=True, **kw):
     fig.update_layout(
         height=height, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family=FONT, color=STOCK, size=13),
-        title=dict(text=title, font=dict(family=FONT, size=15, color=STOCK), x=0, xanchor="left") if title else None,
+        title=dict(text=title.upper(), font=dict(family=DISPLAY, size=16, color=STOCK), x=0, xanchor="left") if title else None,
         margin=dict(l=8, r=8, t=44 if title else 12, b=8), showlegend=legend,
         legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1, font=dict(color=MUTED_ON_NAVY)),
         hoverlabel=dict(bgcolor=INK, bordercolor=STOCK, font=dict(family=NUM, color=STOCK)),

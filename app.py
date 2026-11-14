@@ -9,6 +9,7 @@ import charts  # noqa: E402
 import ui  # noqa: E402
 from data_loader import (compute_league_table, load_forecast_log, load_full_dataset, load_metrics,  # noqa: E402
                          load_track_record, load_upcoming)
+from pipeline.config import ELO_PARAMS  # noqa: E402
 from predictor import is_cold_start, predict_match, teams  # noqa: E402
 
 UK = "Europe/London"
@@ -84,13 +85,17 @@ def fixtures_page():
     with right:
         tr = metrics.get("track_record", {}).get(CURRENT)
         if tr:
-            st.markdown(ui.ledger([
-                ("Model log loss", fmt_ll(tr["model"]["log_loss"]), f"{CURRENT}, {tr['model']['n']} matches", True),
+            st.markdown(ui.slip(f"Season ledger · {CURRENT}", [
+                ("Model log loss", fmt_ll(tr["model"]["log_loss"]), f"{tr['model']['n']} matches settled",
+                 tr["model"]["log_loss"] < tr["null_baseline"]["log_loss"]),
                 ("Baseline", fmt_ll(tr["null_baseline"]["log_loss"]), "historical result rates", False),
                 ("Favourite won", f"{tr['favourite_hit_rate'] * 100:.0f}%", "of settled coupons", False),
             ]), unsafe_allow_html=True)
             st.markdown('<p class="note">Lower log loss is better. Coupons are scored walk-forward: models frozen '
                         'at the start of the season, features updated before each match.</p>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<p class="note">No coupons settled in {CURRENT} yet. The season ledger opens after the '
+                        f'first results come in.</p>', unsafe_allow_html=True)
 
     later = upcoming[upcoming["round"] != rnd] if not upcoming.empty else upcoming
     for r2, rows in later.groupby("round", sort=True) if not later.empty else []:
@@ -102,7 +107,8 @@ def fixtures_page():
         last_round = rec["round"].max()
         last = rec[rec["round"] == last_round].sort_values("Date")
         hits = int((last[["P_Draw", "P_Away", "P_Home"]].to_numpy().argmax(1) == last["FTR"].to_numpy()).sum())
-        st.markdown(f'<h2 class="sec">Gameweek {int(last_round)}, settled: {hits} of {len(last)} favourites won</h2>',
+        st.markdown(f'<h2 class="sec">Gameweek {int(last_round)}, settled: {hits} of {len(last)} favourites won</h2>'
+                    '<p class="pgsub">Bold figure: the model\'s favourite. Boxed field: what happened.</p>',
                     unsafe_allow_html=True)
         cps = []
         for r in last.itertuples():
@@ -126,7 +132,7 @@ def predictor_page():
         c1, c2, c3 = st.columns([2, 2, 1.2], vertical_alignment="bottom")
         home = c1.selectbox("Home club", options, index=options.index(d_home) if d_home in options else 0)
         away = c2.selectbox("Away club", options, index=options.index(d_away) if d_away in options else 1)
-        go = c3.form_submit_button("Issue forecast", use_container_width=True)
+        go = c3.form_submit_button("Issue forecast", width="stretch")
     if home == away:
         st.error("Choose two different clubs: a club can't play itself.")
         return
@@ -137,8 +143,9 @@ def predictor_page():
     st.session_state["issued"] = True
     try:
         res = predict_match(home, away)
-    except Exception as e:  # unknown club or broken assets
-        st.error(f"The forecast couldn't be issued: {e}")
+    except Exception:  # unknown club or broken assets
+        st.error("The forecast couldn't be issued: the model files could not score this pairing. "
+                 "Try another pairing, or check back after the next weekly refresh.")
         return
     p = res["proba"]
     fav = max(p, key=p.get)
@@ -159,13 +166,13 @@ def predictor_page():
     cold = [t for t in (home, away) if is_cold_start(t)]
     if cold:
         st.markdown(f'<p class="note"><b>Prior in use:</b> {ui.esc(" and ".join(cold))} has no top-flight matches in the '
-                    f'model\'s history yet, so it starts from 1420 Elo and league-average xG.</p>', unsafe_allow_html=True)
+                    f'model\'s history yet, so it starts from {ELO_PARAMS["PROMOTED_START_ELO"]} Elo and league-average xG.</p>', unsafe_allow_html=True)
 
     c1, c2 = st.columns([1.25, 1], gap="large")
     with c1:
         st.markdown('<h2 class="sec">Score grid (%)</h2>', unsafe_allow_html=True)
         st.plotly_chart(charts.score_grid(res["matrix"], res["home_team"], res["away_team"]),
-                        use_container_width=True, config={"displayModeBar": False})
+                        width="stretch", config={"displayModeBar": False})
     with c2:
         f = res["features"]
         st.markdown('<h2 class="sec">Inputs</h2>', unsafe_allow_html=True)
@@ -208,10 +215,10 @@ def record_page():
                         f'seasons before {season}; ratings, form and goal rates were updated before each match, '
                         f'so no forecast saw its own result. Forecasts the weekly pipeline issued before kickoff '
                         f'are marked <b>logged pre-match</b>.</p>', unsafe_allow_html=True)
-            st.plotly_chart(charts.cumulative_edge(rec), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(charts.cumulative_edge(rec), width="stretch", config={"displayModeBar": False})
             c1, c2 = st.columns(2, gap="large")
-            c1.plotly_chart(charts.round_losses(rec), use_container_width=True, config={"displayModeBar": False})
-            c2.plotly_chart(charts.calibration(rec), use_container_width=True, config={"displayModeBar": False})
+            c1.plotly_chart(charts.round_losses(rec), width="stretch", config={"displayModeBar": False})
+            c2.plotly_chart(charts.calibration(rec), width="stretch", config={"displayModeBar": False})
 
             st.markdown('<h2 class="sec">Every settled forecast</h2>', unsafe_allow_html=True)
             show = rec.sort_values("Date", ascending=False)
@@ -233,6 +240,10 @@ def record_page():
     h = metrics.get("holdout")
     if h:
         st.markdown(f'<h2 class="sec">Holdout test: {h["test_season"]}</h2>', unsafe_allow_html=True)
+        beats = [k for k in ("random_forest", "poisson") if h["stack"]["log_loss"] < h[k]["log_loss"]]
+        verdict = {2: "The stack beats both of its inputs on log loss.",
+                   1: "The stack beats one of its two inputs on log loss.",
+                   0: "The stack does not beat either of its inputs on log loss."}[len(beats)]
         names = [("Naive baseline", "null_baseline"), ("Random Forest alone", "random_forest"),
                  ("Poisson model alone", "poisson"), ("Stack (deployed design)", "stack")]
         body = "".join(f'<tr><td class="l team">{n}</td><td>{h[k]["log_loss"]:.4f}</td><td>{h[k]["brier"]:.4f}</td></tr>'
@@ -241,31 +252,32 @@ def record_page():
                     f'</table></div><p class="prose" style="margin-top:14px">Development protocol: base models trained on '
                     f'{", ".join(h["train_seasons"])}, meta-learner fitted on {h["validation_season"]}, every modelling '
                     f'choice made on {h["validation_season"]}, and {h["test_season"]} ({h["stack"]["n"]} matches) scored '
-                    f'once. The stack beats both of its inputs.</p>', unsafe_allow_html=True)
+                    f'once. {verdict}</p>', unsafe_allow_html=True)
     ui.footer(metrics)
 
 
 def analytics_page():
-    st.markdown('<h1 class="pg">Analytics</h1><p class="pgsub">League trends, ratings and form from every match since '
-                '2022/23.</p>', unsafe_allow_html=True)
+    since = f" since {matches['Season'].min()}" if not matches.empty else ""
+    st.markdown(f'<h1 class="pg">Analytics</h1><p class="pgsub">League trends, ratings and form from every match{since}.</p>',
+                unsafe_allow_html=True)
     if matches.empty:
         st.info("Match data is not available yet.")
         return
     c1, c2 = st.columns(2, gap="large")
-    c1.plotly_chart(charts.result_split(matches), use_container_width=True, config={"displayModeBar": False})
-    c2.plotly_chart(charts.goals_by_season(matches), use_container_width=True, config={"displayModeBar": False})
+    c1.plotly_chart(charts.result_split(matches), width="stretch", config={"displayModeBar": False})
+    c2.plotly_chart(charts.goals_by_season(matches), width="stretch", config={"displayModeBar": False})
 
     cur = current_teams()
     c1, c2 = st.columns([1, 1.2], gap="large")
     with c1:
-        st.plotly_chart(charts.elo_ladder(metrics.get("elo", {}), cur), use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(charts.elo_ladder(metrics.get("elo", {}), cur), width="stretch", config={"displayModeBar": False})
     with c2:
         team = st.selectbox("Club form", cur, index=cur.index("Arsenal") if "Arsenal" in cur else 0)
         fig = charts.xg_form(matches, team)
         if fig is None:
             st.info(f"{team} has no matches in the data yet.")
         else:
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     st.markdown('<h2 class="sec">Head to head</h2>', unsafe_allow_html=True)
     allt = sorted(set(matches["HomeTeam"]) | set(matches["AwayTeam"]))
@@ -275,7 +287,7 @@ def analytics_page():
     t2 = a2.selectbox("Opponent", rest, index=rest.index("Chelsea") if "Chelsea" in rest else 0, key="h2")
     hh = matches[((matches.HomeTeam == t1) & (matches.AwayTeam == t2)) | ((matches.HomeTeam == t2) & (matches.AwayTeam == t1))]
     if hh.empty:
-        st.markdown(f'<p class="prose">{ui.esc(t1)} and {ui.esc(t2)} have not met in the Premier League since 2022/23.</p>',
+        st.markdown(f'<p class="prose">{ui.esc(t1)} and {ui.esc(t2)} have not met in the Premier League{since}.</p>',
                     unsafe_allow_html=True)
     else:
         w1 = int(((hh.HomeTeam == t1) & (hh.FTR == "H")).sum() + ((hh.AwayTeam == t1) & (hh.FTR == "A")).sum())
@@ -323,6 +335,5 @@ PAGES = [st.Page(fixtures_page, title="Fixtures", url_path="fixtures", default=T
          st.Page(table_page, title="Table", url_path="table")]
 nav = st.navigation(PAGES, position="hidden")
 ui.top_bar()
-for col, page in zip(st.columns(len(PAGES)), PAGES):
-    col.page_link(page, label=page.title)
+ui.nav_bar(PAGES, nav.url_path)
 nav.run()
