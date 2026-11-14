@@ -5,12 +5,14 @@ from functools import lru_cache
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 import inference_utils as iu
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 ASSETS_PATH = os.path.join(ROOT, "epl_predictor_assets.pkl")
 OUTCOMES = ("Home Win", "Draw", "Away Win")
+OUTCOME_COLORS = {"Home Win": "#00d4aa", "Draw": "#f59e0b", "Away Win": "#f43f5e"}
 
 
 @lru_cache(maxsize=1)
@@ -53,6 +55,12 @@ def predict_match(home_team: str, away_team: str) -> dict:
                      "home_xg_for": float(f["Home_Rolling_xG_For"]), "home_xg_against": float(f["Home_Rolling_xG_Against"]),
                      "away_xg_for": float(f["Away_Rolling_xG_For"]), "away_xg_against": float(f["Away_Rolling_xG_Against"])},
         "home_cold_start": is_cold_start(home_team), "away_cold_start": is_cold_start(away_team),
+        # Poisson goal distributions for display
+        "h_pmf8": stats.poisson.pmf(np.arange(9), float(r["xG_Home"])),
+        "a_pmf8": stats.poisson.pmf(np.arange(9), float(r["xG_Away"])),
+        # Keys kept for the legacy app layout
+        "stacked_proba": proba,
+        "home_fallback": is_cold_start(home_team), "away_fallback": is_cold_start(away_team),
     }
 
 
