@@ -112,7 +112,9 @@ def season_record(df: pd.DataFrame, dfp: pd.DataFrame, season: str, seasons: lis
     p = predict_rows(rf, meta, rows, dfp)
     prior = class_prior(df[df["season"].isin(prior_seasons)]["FTR"])
     rec = pd.DataFrame({
-        "season": season, "Date": rows["Date"].values,
+        "season": season, "round": rows["round"].values if "round" in rows else np.nan,
+        "fotmob_id": rows["fotmob_id"].values if "fotmob_id" in rows else np.nan,
+        "Date": rows["Date"].values,
         "HomeTeam": rows["HomeTeam_name"].values, "AwayTeam": rows["AwayTeam_name"].values,
         "FTHG": rows["FTHG"].values, "FTAG": rows["FTAG"].values, "FTR": rows["FTR"].values,
         "P_Draw": p[:, 0], "P_Away": p[:, 1], "P_Home": p[:, 2],

@@ -130,7 +130,7 @@ def run(force_retrain=False, dry_run=False, retrain_threshold=config.RETRAIN_BAT
             upcoming.insert(0, "fotmob_id", up["fotmob_id"].values)
 
         # 6. Export
-        keep = [c for c in ["Date", "season", "FTHG", "FTAG", "FTR", "HS", "AS", "HST", "AST", "HC", "AC",
+        keep = [c for c in ["Date", "season", "round", "fotmob_id", "FTHG", "FTAG", "FTR", "HS", "AS", "HST", "AST", "HC", "AC",
                             "HY", "AY", "HR", "AR", "home_xG", "away_xG", "xg_is_proxy",
                             "Home_PreMatch_Elo", "Away_PreMatch_Elo"] if c in df.columns]
         played_out = df[keep].copy()

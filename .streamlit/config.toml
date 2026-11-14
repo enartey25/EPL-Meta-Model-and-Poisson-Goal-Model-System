@@ -3,5 +3,11 @@
 showErrorDetails = false
 
 [browser]
-# Prevents Streamlit from gathering usage statistics
 gatherUsageStats = false
+
+[theme]
+base = "dark"
+primaryColor = "#D7262D"
+backgroundColor = "#0D1B3D"
+secondaryBackgroundColor = "#14244A"
+textColor = "#F2F0EA"
