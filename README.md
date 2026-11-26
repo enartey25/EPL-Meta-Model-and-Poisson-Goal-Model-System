@@ -1,4 +1,27 @@
-# EPL Match Predictor — Stacked Ensemble & Calibrated Poisson System
+<!-- readme-art:start -->
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/hero-dark.svg">
+  <img src="assets/readme/hero-light.svg" width="100%" alt="EPL Meta-Model: Premier League forecasts from a stacked XGBoost + Random Forest ensemble and a zone-calibrated Poisson goal model.">
+</picture>
+
+<img src="https://img.shields.io/badge/status-shipped-ffd23f?style=for-the-badge&labelColor=0c1f14" alt="status: shipped"> <img src="https://img.shields.io/badge/validation-chronological%2C%20no%20leakage-ffd23f?style=for-the-badge&labelColor=0c1f14" alt="validation: chronological, no leakage"> <img src="https://img.shields.io/badge/scoring-log%20loss%20%2B%20Brier-ffd23f?style=for-the-badge&labelColor=0c1f14" alt="scoring: log loss + Brier">
+
+</div>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/stats-dark.svg">
+  <img src="assets/readme/stats-light.svg" width="100%" alt="1.0235 holdout log loss; 1.0790 naive baseline log loss; 1,500+ EPL fixtures, 2022-2025">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/flow-dark.svg">
+  <img src="assets/readme/flow-light.svg" width="100%" alt="How it works: Data → State → Base → Meta → Goals">
+</picture>
+
+<p align="center"><img src="https://skillicons.dev/icons?i=python,sklearn&theme=dark" alt="Built with: python, sklearn"></p>
+<!-- readme-art:end -->
 
 > **Academic & Research Project** — All predictions are statistical estimates for educational purposes only. Not intended for sports betting or financial speculation.
 
